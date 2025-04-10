@@ -11,8 +11,6 @@ function isServiceWorker() {
  * @param hasInstallAction - optional. set it to true, if you have an "installAction" set
  * @public
  */
-
-
 export function createDefaultConfig(optionType: OptionType, hasInstallAction: boolean) {
     if (!isServiceWorker()) {
         throw new AOError('The "createDefaultConfig" function must be initiated from the background script.');

@@ -32,12 +32,12 @@ This library requires three components to function correctly:
 
 ### Background Script
 
-Set up the default configuration in the background script. You need to pass the type of option page you want to save settings in.
+Set up the default configuration in the background script. You need to pass the type of option page you want to save settings in, and whether the page has an `installAction` set.
 
 ```javascript
 import { setDefaultConfig } from "webext-autooptions";
 
-setDefaultConfig('popup'); // Accepts 'popup', 'fullPage', or 'embedded'
+setDefaultConfig('popup', false);
 ```
 
 ### Options HTML
