@@ -11,13 +11,6 @@
 
 ```bash
 npm install autooptions
-
-## Installation
-
-You can install AutoOptions using npm:
-
-```bash
-npm install autooptions
 ```
 
 ## Usage
