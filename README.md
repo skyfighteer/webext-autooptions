@@ -64,8 +64,8 @@ await AO.loadConfig();
 ```
 
 - `storageName`: (Required) The namespace for the saved settings.
-- `saveOnChange`: (Optional) Save changes instantly (default: `true`).
-- `installAction`: (Optional) Option to have a first-time function (usually a welcome message).
+- `saveOnChange`: (Optional) Set this to false to disable auto-saving changes. 
+- `installAction`: (Optional) Set this to run a function on install inside your options file.
 
 If `saveOnChange` is `false`, you can save manually by using:
 
