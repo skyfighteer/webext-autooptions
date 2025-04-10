@@ -16,13 +16,22 @@
     "build:prod": "cross-env NODE_ENV=production node build.mjs & npm run build:api-extractor",
     "build:api-extractor": "npm run build:types & api-extractor run & rimraf types",
     "build:types": "tsc --p src/tsconfig.json",
-    
-    "github:push": "",
     "npm:test": "npm pack --dry-run",
     "npm:publish": "npm publish"
   },
   "author": "skyfighteer",
   "license": "MIT",
+  "keywords": [
+    "chrome",
+    "webext",
+    "web-ext",
+    "preferences",
+    "settings",
+    "options",
+    "storage",
+    "sync",
+    "configuration"
+  ],
   "dependencies": {
     "deep-object-diff": "^1.1.9"
   },
