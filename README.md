@@ -50,7 +50,7 @@ The library automatically handles and validates HTML inputs.
   - `data-ao-default`: Marks an input as checked by default.
   - `data-ao-value=""`: Defines a default value for an input.
   - `data-ao-category=""`: Groups inputs under a category.
-  - `data-ao-exclude`: Excludes an input from being saved.
+  - `data-ao-ignore`: Excludes an input from being saved.
 
 ### Options Script
 
