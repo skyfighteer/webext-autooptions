@@ -1,16 +1,15 @@
-# 🔧 webext-autooptions - Store User Options Automatically
+# webext-autooptions
 
-**webext-autooptions** is a zero-boilerplate wrapper for storing and retrieving Chrome Extension Preferences.
+Zero-boilerplate wrapper for storing and retrieving Chrome Extension Preferences.
 
 ⚡ Built from scratch – fast, tree-shakeable, and bundler-friendly.\
 🔌 Syncs HTML inputs to extension settings directly.\
 🧠 Supports categories, defaults, and exclusions.
 
-
 ## Installation
 
 ```bash
-npm install autooptions
+npm install webext-autooptions
 ```
 
 ## Usage
@@ -26,7 +25,7 @@ The library internally uses the chrome storage API, which requires permission in
 }
 ```
 
-AutoOptions requires three components to function correctly:
+This library requires three components to function correctly:
 1. A background script to load default configurations on install.
 2. An options page to handle user changes.
 3. (A script to retrieve and react to configuration changes dynamically.)
@@ -36,14 +35,14 @@ AutoOptions requires three components to function correctly:
 Set up the default configuration in the background script. You need to pass the type of option page you want to save settings in.
 
 ```javascript
-import { setDefaultConfig } from "autooptions";
+import { setDefaultConfig } from "webext-autooptions";
 
 setDefaultConfig('popup'); // Accepts 'popup', 'fullPage', or 'embedded'
 ```
 
 ### Options HTML
 
-AutoOptions automatically handles and validates HTML inputs.
+The library automatically handles and validates HTML inputs.
 
 - Inputs must have an `id`. Radio inputs require a `name`.
 - Do NOT use the basic HTML attributes for inputs like `default` or `value`. Instead, use `data-ao-` attributes for configuration:
