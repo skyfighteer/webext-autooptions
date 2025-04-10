@@ -1,0 +1,38 @@
+{
+  "name": "webext-autooptions",
+  "version": "0.0.1",
+  "description": "Store Extension Settings Easily",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.mts",
+  "files": [
+    "dist/*",
+    "LICENSE",
+    "README.md",
+    "package.json"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build:dev": "cross-env NODE_ENV=development node build.mjs",
+    "build:prod": "cross-env NODE_ENV=production node build.mjs & npm run build:api-extractor",
+    "build:api-extractor": "npm run build:types & api-extractor run & rimraf types",
+    "build:types": "tsc --p src/tsconfig.json",
+    
+    "github:push": "",
+    "npm:test": "npm pack --dry-run",
+    "npm:publish": "npm publish"
+  },
+  "author": "skyfighteer",
+  "license": "MIT",
+  "dependencies": {
+    "deep-object-diff": "^1.1.9"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "^7.50.0",
+    "@types/chrome": "^0.0.272",
+    "cross-env": "^7.0.3",
+    "esbuild": "^0.25.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.6.2",
+    "valibot": "^1.0.0-rc.2"
+  }
+}

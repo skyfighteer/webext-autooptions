@@ -1,0 +1,4 @@
+{
+  "extends": "../../configs/api-extractor-base.json",
+  "projectFolder": "."
+}
