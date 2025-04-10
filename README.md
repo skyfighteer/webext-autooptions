@@ -1,4 +1,4 @@
-# 🔧 webext-autooptions - Storage API on easy mode.
+# 🔧 webext-autooptions - Store User Options Automatically
 
 **webext-autooptions** is a zero-boilerplate wrapper for storing and retrieving Chrome Extension Preferences.
 
