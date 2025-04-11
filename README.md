@@ -32,7 +32,7 @@ This library requires three components to function correctly:
 
 ### Background Script
 
-Set up the default configuration in the background script. You need to pass the type of option page you want to save settings in, and whether the page has an `installAction` set.
+A default config will be automatically created on the install of the extension, based on the default `ao-` values of your inputs. To set up the default configuration in the background script, you need to pass the type of option page you want to save settings in, and whether the page has an `installAction` set.
 
 ```javascript
 import { setDefaultConfig } from "webext-autooptions";
@@ -45,7 +45,7 @@ setDefaultConfig('popup', false);
 The library automatically handles and validates HTML inputs.
 
 - Inputs must have an `id`. Radio inputs require a `name`.
-- Do NOT use the basic HTML attributes for inputs like `default` or `value`. Instead, use `data-ao-` attributes for configuration:
+- Do NOT use the basic HTML attributes for inputs like `checked` or `value`. Instead, use `data-ao-` attributes for configuration:
   
   - `data-ao-default`: Marks an input as checked by default.
   - `data-ao-value=""`: Defines a default value for an input.
