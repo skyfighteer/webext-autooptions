@@ -66,7 +66,7 @@
     };
     const isSchema = context.kind === "schema";
     const message = other?.message ?? context.message ?? /* @__PURE__ */ getSpecificMessage(context.reference, issue.lang) ?? (isSchema ? /* @__PURE__ */ getSchemaMessage(issue.lang) : null) ?? config2.message ?? /* @__PURE__ */ getGlobalMessage(issue.lang);
-    if (message) {
+    if (message !== void 0) {
       issue.message = typeof message === "function" ? (
         // @ts-expect-error
         message(issue)
@@ -352,12 +352,13 @@
     saveOnChange: /* @__PURE__ */ optional(/* @__PURE__ */ boolean(), true),
     // optional, accepts: boolean | undefined (default: true)
     installAction: /* @__PURE__ */ nullish(/* @__PURE__ */ function_(), null)
-    // optional, accepts: function | undefined | null (default: true)
+    // optional, accepts: function | undefined | null (default: null)
   });
+  var autoOptionsConfig;
   function parseAutoOptionsConfig(unknownConfig) {
     const result = /* @__PURE__ */ safeParse(AutoOptionsConfigSchema, unknownConfig);
     if (result.success) {
-      autoOptionsConfig = result.output;
+      autoOptionsConfig = Object.freeze(result.output);
     } else {
       result.issues.forEach((issue) => {
         const errorMessage = issue.message;
@@ -376,62 +377,73 @@
       throw new AOError("Invalid init parameters.");
     }
   }
-  var autoOptionsConfig;
+  var isDebug = true;
+  var manifest = chrome.runtime.getManifest();
+  var isExtensionUnpacked = !("update_url" in manifest);
+  function P(e) {
+    return e !== null && typeof e == "object";
+  }
+  function hasText(string2) {
+    return string2.trim().length !== 0;
+  }
+  function hasWhiteSpace(string2) {
+    return /\s/.test(string2);
+  }
   var OptionHandler = class {
     input;
     category;
     name;
-    defaultValue;
+    defaultOptionValue;
     constructor(input) {
       this.input = input;
       this.category = this.getCategory;
       this.name = this.getName;
-      this.defaultValue = this.input.getDefaultValue;
+      this.defaultOptionValue = this.getDefaultOptionValue;
       this.init();
-      supportedInputs.push(this);
+      supportedOptions.push(this);
     }
     // ----- INIT -------
-    async init() {
-      await this.setUI();
-      this.addValueChangeEL();
-    }
     get getCategory() {
       const category = this.input.getAOProperty("category");
-      if (category !== null) {
-        configHandler.addNewCategory(category);
-      }
       return category;
     }
     get getName() {
       return this.input.isRadio ? this.input.el.name : this.input.el.id;
     }
-    async setUI() {
-      const isFirstTime = configHandler.isFirstTime;
-      if (!isFirstTime) {
-        this.input.setDisplayedValue = this.getStoredValue();
-      } else {
-        await this.setDefaultValue();
+    get getDefaultOptionValue() {
+      if (this.input.isRadio) {
+        return this.input.hasAOProperty("default") ? this.getOptionValue : null;
       }
+      return this.input.defaultValue;
+    }
+    async init() {
+      this.addValueChangeEL();
+    }
+    async setUI() {
+      this.input.setDisplayedValue = this.getStoredValue();
     }
     addValueChangeEL() {
       if (!autoOptionsConfig.saveOnChange) return;
       this.input.el.addEventListener("change", async () => {
-        await this.storeValue();
+        if (isDebug) {
+          console.log("Storing", this.input.el);
+        }
+        await this.storeOptionValue();
       });
     }
     // ------ CONFIG -------
     /**
-     * Store the current value of the input.
+     * Store the current value of the input in the Chrome Storage.
     */
-    async storeValue() {
+    async storeOptionValue() {
       await configHandler.setOptionValue({
         category: this.category,
         name: this.name,
-        value: this.getCurrentValue
+        value: this.getOptionValue
       });
     }
     /**
-     * Get the stored value of input.
+     * Get the stored option-value of input.
      */
     getStoredValue() {
       return configHandler.getOptionValue({
@@ -440,23 +452,9 @@
       });
     }
     /**
-     * Set the value of the input to the default one.
+     * Returns the option-value of the input.
      */
-    async setDefaultValue() {
-      if (this.input.isBoolean) {
-        this.input.el.checked = this.defaultValue;
-      } else {
-        this.input.el.value = this.defaultValue;
-        if (!this.isOnDefaultValue) {
-          throw new AOError(`"${this.defaultValue}" is an invalid default value.`, this.input.el);
-        }
-      }
-      await this.storeValue();
-    }
-    /**
-     * Returns the current value of the input.
-     */
-    get getCurrentValue() {
+    get getOptionValue() {
       if (this.input.isCheckbox) {
         return this.input.el.checked;
       } else if (this.input.isRadio) {
@@ -466,56 +464,74 @@
       }
     }
     /**
-     * Returns true if the current value matches the default value.
-     */
-    get isOnDefaultValue() {
-      return this.input.getCurrentValue === this.defaultValue;
-    }
-    /**
      * Returns true if the current value matches the stored value in storage.
      */
-    get isOnStoredValue() {
-      return this.input.getCurrentValue === this.getStoredValue();
+    get isOnStoredOptionValue() {
+      if (this.input.isRadio && !this.input.el.checked) {
+        return true;
+      }
+      return this.getOptionValue === this.getStoredValue();
     }
   };
-  var supportedInputs = [];
-  var isDate = (d) => d instanceof Date;
+  async function loadUI() {
+    for (const option of supportedOptions) {
+      await option.setUI();
+    }
+  }
+  function getDefaultConfig() {
+    let defaultConfig = {};
+    const categories = [...new Set(supportedOptions.filter((input) => input.category !== null).map((input) => input.category))];
+    categories.map((category) => defaultConfig[category] = {});
+    supportedOptions.forEach((option) => {
+      const category = option.category;
+      const name = option.name;
+      const value = option.defaultOptionValue;
+      if (value === null) return;
+      if (category) {
+        defaultConfig[category][name] = value;
+      } else {
+        defaultConfig[name] = value;
+      }
+    });
+    return defaultConfig;
+  }
+  var supportedOptions = [];
   var isEmpty = (o) => Object.keys(o).length === 0;
   var isObject = (o) => o != null && typeof o === "object";
   var hasOwnProperty = (o, ...args) => Object.prototype.hasOwnProperty.call(o, ...args);
-  var isEmptyObject = (o) => isObject(o) && isEmpty(o);
   var makeObjectWithoutPrototype = () => /* @__PURE__ */ Object.create(null);
-  var updatedDiff = (lhs, rhs) => {
-    if (lhs === rhs) return {};
-    if (!isObject(lhs) || !isObject(rhs)) return rhs;
-    if (isDate(lhs) || isDate(rhs)) {
-      if (lhs.valueOf() == rhs.valueOf()) return {};
-      return rhs;
-    }
+  var addedDiff = (lhs, rhs) => {
+    if (lhs === rhs || !isObject(lhs) || !isObject(rhs)) return {};
     return Object.keys(rhs).reduce((acc, key) => {
       if (hasOwnProperty(lhs, key)) {
-        const difference = updatedDiff(lhs[key], rhs[key]);
-        if (isEmptyObject(difference) && !isDate(difference) && (isEmptyObject(lhs[key]) || !isEmptyObject(rhs[key])))
-          return acc;
+        const difference = addedDiff(lhs[key], rhs[key]);
+        if (isObject(difference) && isEmpty(difference)) return acc;
         acc[key] = difference;
         return acc;
       }
+      acc[key] = rhs[key];
       return acc;
     }, makeObjectWithoutPrototype());
   };
-  var updated_default = updatedDiff;
-  function checkStoragePermission() {
-    const isStorageAccessAllowed = chrome.storage !== void 0;
-    if (!isStorageAccessAllowed) {
-      throw new AOError(`Unable to access chrome storage. Try declaring the "storage" permission in the extension's manifest.`);
-    }
+  var added_default = addedDiff;
+  var deletedDiff = (lhs, rhs) => {
+    if (lhs === rhs || !isObject(lhs) || !isObject(rhs)) return {};
+    return Object.keys(lhs).reduce((acc, key) => {
+      if (hasOwnProperty(rhs, key)) {
+        const difference = deletedDiff(lhs[key], rhs[key]);
+        if (isObject(difference) && isEmpty(difference)) return acc;
+        acc[key] = difference;
+        return acc;
+      }
+      acc[key] = void 0;
+      return acc;
+    }, makeObjectWithoutPrototype());
+  };
+  var deleted_default = deletedDiff;
+  async function setItemInStorage(storageName, item) {
+    await chrome.storage.sync.set({ [storageName]: item });
   }
-  async function setStoredConfig(storageName, config) {
-    checkStoragePermission();
-    await chrome.storage.sync.set({ [storageName]: config });
-  }
-  async function getFromStorage(storageName) {
-    checkStoragePermission();
+  async function getItemFromStorage(storageName) {
     const extensionStorageContent = await chrome.storage.sync.get();
     const storedConfig = extensionStorageContent[storageName];
     if (storedConfig !== void 0) {
@@ -524,22 +540,22 @@
       return null;
     }
   }
-  function onSettingChange(storageName, callback) {
-    return chrome.storage.onChanged.addListener((storage, storageType) => {
-      const configuration = storage[storageName];
-      if (storageType !== "sync" || !configuration) return;
-      const diff = updated_default(configuration.oldValue, configuration.newValue);
-      const hasCategory = typeof Object.values(diff)[0] === "object";
-      const category = hasCategory ? Object.keys(diff)[0] : null;
-      const [name] = category ? Object.keys(diff[category]) : Object.keys(diff);
-      const [value] = category ? Object.values(diff[category]) : Object.values(diff);
-      callback({
-        category,
-        name,
-        value
-      });
-    });
-  }
+  var SUPPORTED_INPUT_TYPES = [
+    "checkbox",
+    "color",
+    "date",
+    "datetime-local",
+    "email",
+    "month",
+    "number",
+    "radio",
+    "range",
+    "tel",
+    "text",
+    "time",
+    "url",
+    "week"
+  ];
   var UNSUPPORTED_INPUT_TYPES = [
     "button",
     // not actually an input
@@ -558,12 +574,10 @@
     "search"
     // should not be saved
   ];
-  function isEmpty2(value) {
-    if (value.trim().length === 0) {
-      return true;
-    }
-    return false;
-  }
+  var INPUT_TYPES = [
+    ...SUPPORTED_INPUT_TYPES,
+    ...UNSUPPORTED_INPUT_TYPES
+  ];
   var AOPropertyPrefix = "data-ao";
   function getDefaultRange(input) {
     const min = Number(input.min);
@@ -595,14 +609,14 @@
     };
     return defaultInputValues[inputEl.type];
   }
-  function loadInputs() {
+  function handleInputs() {
     const inputElements = Array.from(document.querySelectorAll("input"));
     inputElements.forEach((inputElement) => new InputBase(inputElement));
-    validateInputs(supportedInputs);
+    validateInputs(supportedOptions);
   }
-  function validateInputs(supportedInputs2) {
+  function validateInputs(supportedOptions2) {
     const checkDuplicateIDs = () => {
-      const IDs = supportedInputs2.map((inputElement) => inputElement.input.el.id);
+      const IDs = supportedOptions2.map((option) => option.input.el.id);
       IDs.filter((item, index) => {
         if (IDs.indexOf(item) !== index) {
           throw new AOError(`'${item}' is a duplicate ID.`);
@@ -610,23 +624,46 @@
       });
     };
     const checkNoInputs = () => {
-      if (supportedInputs2.length === 0) {
+      if (supportedOptions2.length === 0) {
         throw new AOError("No supported inputs were found in the document.");
+      }
+    };
+    const checkRadioGroups = () => {
+      const radios = supportedOptions2.filter((option) => option.input.isRadio);
+      const groups = radios.reduce((groupMap, radio) => {
+        const groupName = radio.name;
+        if (!groupMap[groupName]) {
+          groupMap[groupName] = [];
+        }
+        groupMap[groupName].push(radio);
+        return groupMap;
+      }, {});
+      const hasInvalidGroup = Object.values(groups).some((optionHandlers) => {
+        const defaultCount = optionHandlers.filter(
+          (optionHandler) => optionHandler.input.hasAOProperty("default")
+        ).length;
+        return defaultCount !== 1;
+      });
+      if (hasInvalidGroup) {
+        throw new AOError('Every radio input group must have exactly one input with the property "ao-default"!');
       }
     };
     checkDuplicateIDs();
     checkNoInputs();
+    checkRadioGroups();
   }
   var InputBase = class {
     el;
     isCheckbox;
     isRadio;
     isBoolean;
+    defaultValue;
     constructor(inputElement) {
       this.el = inputElement;
       this.isCheckbox = this.isType("checkbox");
       this.isRadio = this.isType("radio");
       this.isBoolean = this.isCheckbox || this.isRadio;
+      this.defaultValue = this.getDefaultValue;
       if (this.isSupported) {
         new OptionHandler(this);
       }
@@ -638,11 +675,21 @@
       if (this.isIgnored) {
         return false;
       }
+      console.log(this.el.type);
+      if (!INPUT_TYPES.includes(this.el.type)) {
+        throw new AOError("This input must have a valid input type.", this.el);
+      }
       if (!this.el.id) {
         throw new AOError("This input must have an ID set.", this.el);
       }
       if (this.isRadio && !this.el.name) {
         throw new AOError("All radio inputs must have a name set.", this.el);
+      }
+      if (!this.isBoolean && this.hasAOProperty("default")) {
+        throw new AOError('Only boolean inputs can have a "default" ao-property.', this.el);
+      }
+      if (this.isBoolean && this.getAOProperty("value") !== null) {
+        throw new AOError('Only non-boolean inputs can have a "value" ao-property.', this.el);
       }
       return true;
     }
@@ -652,25 +699,32 @@
       const isIgnored = isTypeUnsupported || isIgnoredByDeveloper;
       return isIgnored;
     }
-    // ********** PUBLIC ***************** //
-    hasAOProperty(AOProperty2) {
-      return this.el.hasAttribute(`${AOPropertyPrefix}-${AOProperty2}`);
+    // ********** AO-PROPERTY ***************** //
+    hasAOProperty(AOProperty) {
+      return this.el.hasAttribute(`${AOPropertyPrefix}-${AOProperty}`);
     }
-    getAOProperty(AOProperty2) {
-      const AOPropertyValue = this.el.getAttribute(`${AOPropertyPrefix}-${AOProperty2}`);
-      if (AOPropertyValue !== null && !isEmpty2(AOPropertyValue)) {
-        return AOPropertyValue;
+    getAOProperty(AOProperty) {
+      const AOPropertyValue = this.el.getAttribute(`${AOPropertyPrefix}-${AOProperty}`);
+      if (AOPropertyValue === null) {
+        return null;
       }
-      return null;
+      if (!hasText(AOPropertyValue)) {
+        return null;
+      }
+      if (hasWhiteSpace(AOPropertyValue)) {
+        throw new AOError("An ao-property might not contain whitespace.", this.el);
+      }
+      return AOPropertyValue;
     }
-    set setDisplayedValue(savedValue) {
+    // ********** CURRENT-VALUE ***************** //
+    set setDisplayedValue(optionValue) {
       if (this.isCheckbox) {
-        this.el.checked = savedValue;
+        this.el.checked = optionValue;
       } else if (this.isRadio) {
-        const isActiveRadio = this.el.id === savedValue;
-        this.el.checked = isActiveRadio;
+        const isActive = this.el.id === optionValue;
+        this.el.checked = isActive;
       } else {
-        this.el.value = savedValue;
+        this.el.value = optionValue;
       }
     }
     get getCurrentValue() {
@@ -680,15 +734,141 @@
         return this.el.value;
       }
     }
+    //**** DEFAULT VALUE OF INPUT ******/
     get getDefaultValue() {
       const defaultValue = getDefaultInputValue(this.el);
       if (this.isBoolean) {
-        return this.hasAOProperty("default") ?? defaultValue;
+        return this.hasAOProperty("default") ? true : defaultValue;
       } else {
         return this.getAOProperty("value") ?? defaultValue;
       }
     }
+    /**
+     * Returns true if the current value matches the default value.
+     */
+    get isOnDefaultValue() {
+      return this.getCurrentValue === this.defaultValue;
+    }
+    /**
+     * Set the value of the input to the default one. TODO save after
+     */
+    async setDefaultValue() {
+      if (this.isBoolean) {
+        this.el.checked = this.defaultValue;
+      } else {
+        this.el.value = this.defaultValue;
+        if (!this.isOnDefaultValue) {
+          throw new AOError(`"${this.defaultValue}" is an invalid default value.`, this.el);
+        }
+      }
+    }
   };
+  var semver = /^[v^~<>=]*?(\d+)(?:\.([x*]|\d+)(?:\.([x*]|\d+)(?:\.([x*]|\d+))?(?:-([\da-z\-]+(?:\.[\da-z\-]+)*))?(?:\+[\da-z\-]+(?:\.[\da-z\-]+)*)?)?)?$/i;
+  var validateAndParse = (version) => {
+    if (typeof version !== "string") {
+      throw new TypeError("Invalid argument expected string");
+    }
+    const match = version.match(semver);
+    if (!match) {
+      throw new Error(`Invalid argument not valid semver ('${version}' received)`);
+    }
+    match.shift();
+    return match;
+  };
+  var isWildcard = (s) => s === "*" || s === "x" || s === "X";
+  var tryParse = (v) => {
+    const n = parseInt(v, 10);
+    return isNaN(n) ? v : n;
+  };
+  var forceType = (a, b2) => typeof a !== typeof b2 ? [String(a), String(b2)] : [a, b2];
+  var compareStrings = (a, b2) => {
+    if (isWildcard(a) || isWildcard(b2))
+      return 0;
+    const [ap, bp] = forceType(tryParse(a), tryParse(b2));
+    if (ap > bp)
+      return 1;
+    if (ap < bp)
+      return -1;
+    return 0;
+  };
+  var compareSegments = (a, b2) => {
+    for (let i = 0; i < Math.max(a.length, b2.length); i++) {
+      const r = compareStrings(a[i] || "0", b2[i] || "0");
+      if (r !== 0)
+        return r;
+    }
+    return 0;
+  };
+  var compareVersions = (v1, v2) => {
+    const n1 = validateAndParse(v1);
+    const n2 = validateAndParse(v2);
+    const p1 = n1.pop();
+    const p2 = n2.pop();
+    const r = compareSegments(n1, n2);
+    if (r !== 0)
+      return r;
+    if (p1 && p2) {
+      return compareSegments(p1.split("."), p2.split("."));
+    } else if (p1 || p2) {
+      return p1 ? -1 : 1;
+    }
+    return 0;
+  };
+  async function onExtensionInstall() {
+    await storeExtensionVersion();
+    if (autoOptionsConfig.installAction === null) {
+      closeTab();
+    } else {
+      autoOptionsConfig.installAction();
+    }
+  }
+  async function isExtensionUpdated() {
+    const currentVersion = manifest.version;
+    const storedVersion = await getStoredExtensionVersion();
+    const isExtensionUpdated2 = compareVersions(currentVersion, storedVersion) === 1;
+    if (isExtensionUpdated2) {
+      if (isDebug) {
+        console.log(`Extension version updated: ${storedVersion} \u2192 ${currentVersion}`);
+      }
+    }
+    return isExtensionUpdated2;
+  }
+  function closeTab() {
+    chrome.tabs.getCurrent((tab) => {
+      const tabId = tab?.id;
+      chrome.tabs.remove(tabId);
+    });
+  }
+  function getUpdatedConfig(_source, _target) {
+    const source = structuredClone(_source);
+    const target = structuredClone(_target);
+    const result = source;
+    const addedKeys = added_default(source, target);
+    const deletedKeys = deleted_default(source, target);
+    if (isDebug) {
+      console.log("Extension has been updated, migrating settings...");
+      console.log("Removing ", deletedKeys);
+      console.log("Adding ", addedKeys);
+    }
+    for (let key in deletedKeys) {
+      const isInsideCategory = P(deletedKeys[key]);
+      if (isInsideCategory) {
+        for (let deletedKey in deletedKeys[key]) {
+          delete result[key][deletedKey];
+        }
+      } else {
+        delete result[key];
+      }
+    }
+    Object.assign(result, addedKeys);
+    return result;
+  }
+  async function getStoredExtensionVersion() {
+    return await getItemFromStorage("extensionVersion");
+  }
+  async function storeExtensionVersion() {
+    await setItemInStorage("extensionVersion", manifest.version);
+  }
   var ConfigHandler = class {
     storageName;
     configuration;
@@ -696,55 +876,51 @@
     /* ---- Loading / Saving Configuration ---- */
     async init() {
       this.storageName = autoOptionsConfig.storageName;
-      this.configuration = await this.getConfig();
-      loadInputs();
-      this.handleFirstTime();
+      handleInputs();
+      await this.loadConfig();
+      await this.handleExtensionLifecycle();
     }
-    async getConfig() {
-      const storedConfiguration = await getFromStorage(this.storageName);
-      if (storedConfiguration !== null) {
-        return storedConfiguration;
+    async loadConfig() {
+      const storedConfig = await getItemFromStorage(this.storageName);
+      if (storedConfig !== null) {
+        await this.setConfig(storedConfig);
       } else {
         this.isFirstTime = true;
-        return /* @__PURE__ */ Object.create(null);
+        await this.resetToDefault();
       }
     }
-    handleFirstTime() {
+    async setConfig(config) {
+      this.configuration = config;
+      await this.storeConfig();
+      await loadUI();
+    }
+    async storeConfig() {
+      await setItemInStorage(this.storageName, this.configuration);
+    }
+    async handleExtensionLifecycle() {
       if (this.isFirstTime) {
-        if (autoOptionsConfig.installAction === null) {
-          chrome.tabs.getCurrent((tab) => {
-            const tabId = tab?.id;
-            if (tabId) {
-              chrome.tabs.remove(tabId);
-            } else {
-            }
-          });
-        } else {
-          autoOptionsConfig.installAction();
-        }
+        await onExtensionInstall();
+        return;
       }
-    }
-    async saveConfig() {
-      await setStoredConfig(this.storageName, this.configuration);
-    }
-    // user does not need to give a category
-    addNewCategory(category) {
-      if (this.configuration[category] === void 0) {
-        this.configuration[category] = /* @__PURE__ */ Object.create(null);
+      if (await isExtensionUpdated()) {
+        await storeExtensionVersion();
+        const newConfiguration = getDefaultConfig();
+        const updatedConfiguration = getUpdatedConfig(this.configuration, newConfiguration);
+        await this.setConfig(updatedConfiguration);
       }
     }
     /* ------------- Set / Get Option ---------------- */
-    async setOptionValue(optionDetails) {
-      const { category, name, value } = optionDetails;
+    async setOptionValue(settingDetails) {
+      const { category, name, value } = settingDetails;
       if (category !== null) {
         this.configuration[category][name] = value;
       } else {
         this.configuration[name] = value;
       }
-      await this.saveConfig();
+      await this.storeConfig();
     }
-    getOptionValue(optionDetails) {
-      const { category, name } = optionDetails;
+    getOptionValue(settingDetails) {
+      const { category, name } = settingDetails;
       if (category !== null) {
         return this.configuration[category][name];
       } else {
@@ -752,23 +928,21 @@
       }
     }
     /* ------- API Stuff ------ */
-    // checks are not strictly necessary, but an optimization
-    // to avoid exceeding the MAX_WRITE_OPERATIONS_PER_MINUTE (120) quota
     async resetToDefault() {
-      for (const input of supportedInputs) {
-        if (!input.isOnDefaultValue) {
-          await input.setDefaultValue();
-        }
-      }
+      const defaultConfig = getDefaultConfig();
+      await this.setConfig(defaultConfig);
     }
     async saveAll() {
       if (autoOptionsConfig.saveOnChange === true) {
         console.warn("Calling 'saveAll()' on AutoOptions is redundant when 'saveOnChange' is enabled.");
         return;
       }
-      for (const input of supportedInputs) {
-        if (!input.isOnStoredValue) {
-          await input.storeValue();
+      for (const input of supportedOptions) {
+        if (!input.isOnStoredOptionValue) {
+          if (isDebug) {
+            console.log("Manually saving", input);
+          }
+          await input.storeOptionValue();
         }
       }
     }
@@ -778,7 +952,7 @@
     constructor(autoOptionsConfig2) {
       parseAutoOptionsConfig(autoOptionsConfig2);
     }
-    // load the configuration
+    // load the configuration (note: should only be ran after DOMContentLoaded)
     async loadConfig() {
       await configHandler.init();
     }
@@ -792,19 +966,13 @@
     }
   };
 
-  // src/script.ts
-  (async () => {
-  })();
-  onSettingChange("a", (e) => {
-    console.log(e);
-  });
-
   // src/options.ts
   (async () => {
     const ao = new AutoOptions({
-      "storageName": "page",
+      "storageName": "myStoredConfig",
+      "saveOnChange": false,
       installAction: function() {
-        console.log("We need it to stay open !!!");
+        console.log("Welcome message.");
       }
     });
     await ao.loadConfig();

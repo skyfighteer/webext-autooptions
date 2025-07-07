@@ -1,6 +1,6 @@
 {
   "extends": ["../../../configs/tsconfig-base.json", "../../../configs/tsconfig-api-extractor.json"],
   "compilerOptions": {
-    "outDir": "../types",
+    "outDir": "../types"
   },
 }

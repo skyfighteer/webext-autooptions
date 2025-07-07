@@ -1,9 +1,9 @@
-export function isEmpty(value: string) {
-    if (value.trim().length === 0) {
-        return true;
-    }
-
-    return false;
+export function hasText(string: string) {
+    return string.trim().length !== 0;
 }
 
-export { isNull } from "../../../sky-helper/dist/index.mjs"
+export function hasWhiteSpace(string: string) {
+    return (/\s/).test(string);
+}
+
+export { isNull, isObject, isBoolean } from "../../../sky-helper/dist/index.mjs"

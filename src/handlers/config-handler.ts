@@ -1,114 +1,111 @@
-import { supportedInputs } from "./option-handler";
-import { getFromStorage, setStoredConfig } from "./storage-handler";
-import { loadInputs } from "../inputs/input-base";
-import { autoOptionsConfig } from "../config"
+import { getDefaultConfig, loadUI, supportedOptions } from "./option-handler";
+import { getItemFromStorage, setItemInStorage } from "./storage-handler";
+import { handleInputs } from "../inputs/input-base";
+import { autoOptionsConfig, isDebug } from "../config"
+import { onExtensionInstall, isExtensionUpdated, storeExtensionVersion, getUpdatedConfig } from "./lifecycle-handler";
 
-type OptionCategory = string;
-type OptionName = string;
-type OptionValue = boolean | string;
-
-type Setting = Record<OptionName, OptionValue>
-
-type Configuration = Record<OptionCategory, Setting> & Setting;
-
-interface SettingDetails {
-    category: OptionCategory | null;
-    name: OptionName;
-    value: OptionValue;
+export namespace Option {
+  export type Category = string;
+  export type Name = string;
+  export type Value = boolean | string;
 }
+
+export type Setting = Record<Option.Name, Option.Value>
+
+export interface Configuration {
+    [key: string]: Setting | Option.Value;
+}
+
+export interface SettingDetails {
+    category: Option.Category | null;
+    name: Option.Name;
+    value: Option.Value;
+}
+
 type UpdatedSettingDetails = Omit<SettingDetails, 'value'>
-type StorageName = string;
+
+export type StorageName = string;
 
 class ConfigHandler {
-    public storageName!: StorageName;
-    public configuration!: Configuration;
+    private storageName!: StorageName;
+    private configuration!: Configuration;
     public isFirstTime: boolean = false;
 
     /* ---- Loading / Saving Configuration ---- */
 
     public async init() {
         this.storageName = autoOptionsConfig.storageName;
-        this.configuration = await this.getConfig();
-        loadInputs();
-        this.handleFirstTime();
+        handleInputs();
+        await this.loadConfig();
+        await this.handleExtensionLifecycle();
     }
 
-    private async getConfig() {
-        const storedConfiguration = await getFromStorage(this.storageName);
+    private async loadConfig() {
+        const storedConfig = await getItemFromStorage(this.storageName) as Configuration | null;
         
-        if (storedConfiguration !== null) {
-            // caching the configuration
-            return storedConfiguration;
+        if (storedConfig !== null) {
+            await this.setConfig(storedConfig);
         } else {
             this.isFirstTime = true;
-            return Object.create(null); // create empty object
+            await this.resetToDefault();
         }
     }
 
-    private handleFirstTime() {
+    private async setConfig(config: Configuration) {
+        this.configuration = config;
+        await this.storeConfig();
+        await loadUI();
+    }
+
+    private async storeConfig() {
+        await setItemInStorage(this.storageName, this.configuration);
+    }
+
+    private async handleExtensionLifecycle() {
         if (this.isFirstTime) {
-            if (autoOptionsConfig.installAction === null) {
-                // close current tab, it was only opened to save config
-                chrome.tabs.getCurrent(tab => {
-                    const tabId = tab?.id as number;
-                    chrome.tabs.remove(tabId);
-                })
-            } else {
-                autoOptionsConfig.installAction();
-            }
+            await onExtensionInstall();
+            return;
         }
-    }
-
-    public async saveConfig() {
-        await setStoredConfig(this.storageName, this.configuration);
-    }
-
-    // user does not need to give a category
-    public addNewCategory(category: OptionCategory) {
-        // if a category does not exist yet in the config
-        if (this.configuration[category] === undefined) {           
-            this.configuration[category] = Object.create(null);
+        
+        if (await isExtensionUpdated()) {
+            await storeExtensionVersion();
+            const newConfiguration = getDefaultConfig();
+            const updatedConfiguration = getUpdatedConfig(this.configuration, newConfiguration);
+            await this.setConfig(updatedConfiguration);
         }
     }
 
     /* ------------- Set / Get Option ---------------- */
 
-    public async setOptionValue(optionDetails: SettingDetails) {
-        const { category, name, value } = optionDetails;
+    public async setOptionValue(settingDetails: SettingDetails) {
+        const { category, name, value } = settingDetails;
 
         // change value of option in configuration
         if (category !== null) {
-            this.configuration[category][name] = value;
+            (this.configuration[category] as Setting)[name] = value;
         } else {
-            (this.configuration[name] as OptionValue) = value;
+            this.configuration[name] = value;
         }
 
-        // save entire configuration,
-        await this.saveConfig();
+        // save entire configuration
+        await this.storeConfig();
     }
 
-    public getOptionValue(optionDetails: UpdatedSettingDetails): OptionValue {
-        const { category, name } = optionDetails;
+    public getOptionValue(settingDetails: UpdatedSettingDetails): Option.Value {
+        const { category, name } = settingDetails;
 
         if (category !== null) {
-            return this.configuration[category][name];
+            return (this.configuration[category] as Setting)[name];
         } else {
-            return this.configuration[name] as OptionValue;
+            return this.configuration[name] as Option.Value;
         }
     }
 
     /* ------- API Stuff ------ */
 
-    // checks are not strictly necessary, but an optimization
-    // to avoid exceeding the MAX_WRITE_OPERATIONS_PER_MINUTE (120) quota
-
     public async resetToDefault() {
-        // reset all inputs to default value
-        for (const input of supportedInputs) {
-            if (!input.isOnDefaultValue) {
-               await input.setDefaultValue();
-            }
-        }
+        const defaultConfig = getDefaultConfig();
+        await this.setConfig(defaultConfig);
     }
 
     public async saveAll() {
@@ -117,13 +114,17 @@ class ConfigHandler {
             return;
         }
 
-        for (const input of supportedInputs) {
-            if (!input.isOnStoredValue) {
-                await input.storeValue();
+        for (const input of supportedOptions) {
+            // note: check is not strictly necessary, but an optimization
+            // to avoid exceeding the MAX_WRITE_OPERATIONS_PER_MINUTE (120) quota
+            if (!input.isOnStoredOptionValue) {
+                if (isDebug) {
+                    console.log('Manually saving', input)
+                }
+                await input.storeOptionValue();
             }
         }
     }
 }
 
 export const configHandler = /* @__PURE__ */ new ConfigHandler();
-export type { OptionValue, Configuration, SettingDetails, StorageName }

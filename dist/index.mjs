@@ -1,458 +1,745 @@
 // src/utils/error.ts
-var s = class extends Error {
-  constructor(e, t) {
-    super(e), this.name = "AutoOptions Error", t && console.log(t);
+var AOError = class extends Error {
+  constructor(message, element) {
+    super(message);
+    this.name = `AutoOptions Error`;
+    if (element) console.log(element);
   }
 };
 
-// src/background.ts
-function H() {
-  return "serviceWorker" in self;
-}
-function J(n, e) {
-  if (!H())
-    throw new s('The "createDefaultConfig" function must be initiated from the background script.');
-  return chrome.runtime.onInstalled.addListener((t) => {
-    if (t.reason === "install") {
-      let r = Z(n);
-      if (!r)
-        throw new s("The given options page does not exist. Check your manifest.json file.");
-      n === "embedded" && chrome.runtime.getManifest().options_ui?.open_in_tab === !1 && e ? chrome.runtime.openOptionsPage() : K(r, e);
-    }
-  });
-}
-function K(n, e) {
-  chrome.tabs.create({
-    url: n,
-    active: e
-  });
-}
-function Z(n) {
-  let e = chrome.runtime.getManifest();
-  return {
-    fullPage: e.options_page,
-    // always full tab
-    embedded: e.options_ui?.page,
-    // might be embedded / full tab
-    popup: e.action?.default_popup
-    // popup on the extension bar
-  }[n];
-}
-
 // node_modules/valibot/dist/index.js
-var O;
+var store;
 // @__NO_SIDE_EFFECTS__
-function R(n) {
+function getGlobalConfig(config2) {
   return {
-    lang: n?.lang ?? O?.lang,
-    message: n?.message,
-    abortEarly: n?.abortEarly ?? O?.abortEarly,
-    abortPipeEarly: n?.abortPipeEarly ?? O?.abortPipeEarly
+    lang: config2?.lang ?? store?.lang,
+    message: config2?.message,
+    abortEarly: config2?.abortEarly ?? store?.abortEarly,
+    abortPipeEarly: config2?.abortPipeEarly ?? store?.abortPipeEarly
   };
 }
-var Y;
+var store2;
 // @__NO_SIDE_EFFECTS__
-function Q(n) {
-  return Y?.get(n);
+function getGlobalMessage(lang) {
+  return store2?.get(lang);
 }
-var ee;
+var store3;
 // @__NO_SIDE_EFFECTS__
-function ne(n) {
-  return ee?.get(n);
+function getSchemaMessage(lang) {
+  return store3?.get(lang);
 }
-var te;
+var store4;
 // @__NO_SIDE_EFFECTS__
-function re(n, e) {
-  return te?.get(n)?.get(e);
-}
-// @__NO_SIDE_EFFECTS__
-function ie(n) {
-  let e = typeof n;
-  return e === "string" ? `"${n}"` : e === "number" || e === "bigint" || e === "boolean" ? `${n}` : e === "object" || e === "function" ? (n && Object.getPrototypeOf(n)?.constructor?.name) ?? "null" : e;
-}
-function v(n, e, t, r, i) {
-  let u = i && "input" in i ? i.input : t.value, o = i?.expected ?? n.expects ?? null, f = i?.received ?? /* @__PURE__ */ ie(u), l = {
-    kind: n.kind,
-    type: n.type,
-    input: u,
-    expected: o,
-    received: f,
-    message: `Invalid ${e}: ${o ? `Expected ${o} but r` : "R"}eceived ${f}`,
-    requirement: n.requirement,
-    path: i?.path,
-    issues: i?.issues,
-    lang: r.lang,
-    abortEarly: r.abortEarly,
-    abortPipeEarly: r.abortPipeEarly
-  }, y = n.kind === "schema", p = i?.message ?? n.message ?? /* @__PURE__ */ re(n.reference, l.lang) ?? (y ? /* @__PURE__ */ ne(l.lang) : null) ?? r.message ?? /* @__PURE__ */ Q(l.lang);
-  p && (l.message = typeof p == "function" ? (
-    // @ts-expect-error
-    p(l)
-  ) : p), y && (t.typed = !1), t.issues ? t.issues.push(l) : t.issues = [l];
+function getSpecificMessage(reference, lang) {
+  return store4?.get(reference)?.get(lang);
 }
 // @__NO_SIDE_EFFECTS__
-function m(n) {
+function _stringify(input) {
+  const type = typeof input;
+  if (type === "string") {
+    return `"${input}"`;
+  }
+  if (type === "number" || type === "bigint" || type === "boolean") {
+    return `${input}`;
+  }
+  if (type === "object" || type === "function") {
+    return (input && Object.getPrototypeOf(input)?.constructor?.name) ?? "null";
+  }
+  return type;
+}
+function _addIssue(context, label, dataset, config2, other) {
+  const input = other && "input" in other ? other.input : dataset.value;
+  const expected = other?.expected ?? context.expects ?? null;
+  const received = other?.received ?? /* @__PURE__ */ _stringify(input);
+  const issue = {
+    kind: context.kind,
+    type: context.type,
+    input,
+    expected,
+    received,
+    message: `Invalid ${label}: ${expected ? `Expected ${expected} but r` : "R"}eceived ${received}`,
+    requirement: context.requirement,
+    path: other?.path,
+    issues: other?.issues,
+    lang: config2.lang,
+    abortEarly: config2.abortEarly,
+    abortPipeEarly: config2.abortPipeEarly
+  };
+  const isSchema = context.kind === "schema";
+  const message = other?.message ?? context.message ?? /* @__PURE__ */ getSpecificMessage(context.reference, issue.lang) ?? (isSchema ? /* @__PURE__ */ getSchemaMessage(issue.lang) : null) ?? config2.message ?? /* @__PURE__ */ getGlobalMessage(issue.lang);
+  if (message !== void 0) {
+    issue.message = typeof message === "function" ? (
+      // @ts-expect-error
+      message(issue)
+    ) : message;
+  }
+  if (isSchema) {
+    dataset.typed = false;
+  }
+  if (dataset.issues) {
+    dataset.issues.push(issue);
+  } else {
+    dataset.issues = [issue];
+  }
+}
+// @__NO_SIDE_EFFECTS__
+function _getStandardProps(context) {
   return {
     version: 1,
     vendor: "valibot",
-    validate(e) {
-      return n["~run"]({ value: e }, /* @__PURE__ */ R());
+    validate(value2) {
+      return context["~run"]({ value: value2 }, /* @__PURE__ */ getGlobalConfig());
     }
   };
 }
 // @__NO_SIDE_EFFECTS__
-function ue(n, e, t) {
-  return typeof n.fallback == "function" ? (
+function getFallback(schema, dataset, config2) {
+  return typeof schema.fallback === "function" ? (
     // @ts-expect-error
-    n.fallback(e, t)
+    schema.fallback(dataset, config2)
   ) : (
     // @ts-expect-error
-    n.fallback
+    schema.fallback
   );
 }
 // @__NO_SIDE_EFFECTS__
-function _(n, e, t) {
-  return typeof n.default == "function" ? (
+function getDefault(schema, dataset, config2) {
+  return typeof schema.default === "function" ? (
     // @ts-expect-error
-    n.default(e, t)
+    schema.default(dataset, config2)
   ) : (
     // @ts-expect-error
-    n.default
+    schema.default
   );
 }
 // @__NO_SIDE_EFFECTS__
-function D(n) {
+function boolean(message) {
   return {
     kind: "schema",
     type: "boolean",
-    reference: D,
+    reference: boolean,
     expects: "boolean",
-    async: !1,
-    message: n,
+    async: false,
+    message,
     get "~standard"() {
-      return /* @__PURE__ */ m(this);
+      return /* @__PURE__ */ _getStandardProps(this);
     },
-    "~run"(e, t) {
-      return typeof e.value == "boolean" ? e.typed = !0 : v(this, "type", e, t), e;
+    "~run"(dataset, config2) {
+      if (typeof dataset.value === "boolean") {
+        dataset.typed = true;
+      } else {
+        _addIssue(this, "type", dataset, config2);
+      }
+      return dataset;
     }
   };
 }
 // @__NO_SIDE_EFFECTS__
-function A(n) {
+function function_(message) {
   return {
     kind: "schema",
     type: "function",
-    reference: A,
+    reference: function_,
     expects: "Function",
-    async: !1,
-    message: n,
+    async: false,
+    message,
     get "~standard"() {
-      return /* @__PURE__ */ m(this);
+      return /* @__PURE__ */ _getStandardProps(this);
     },
-    "~run"(e, t) {
-      return typeof e.value == "function" ? e.typed = !0 : v(this, "type", e, t), e;
+    "~run"(dataset, config2) {
+      if (typeof dataset.value === "function") {
+        dataset.typed = true;
+      } else {
+        _addIssue(this, "type", dataset, config2);
+      }
+      return dataset;
     }
   };
 }
 // @__NO_SIDE_EFFECTS__
-function I(n, e) {
+function nullish(wrapped, default_) {
   return {
     kind: "schema",
     type: "nullish",
-    reference: I,
-    expects: `(${n.expects} | null | undefined)`,
-    async: !1,
-    wrapped: n,
-    default: e,
+    reference: nullish,
+    expects: `(${wrapped.expects} | null | undefined)`,
+    async: false,
+    wrapped,
+    default: default_,
     get "~standard"() {
-      return /* @__PURE__ */ m(this);
+      return /* @__PURE__ */ _getStandardProps(this);
     },
-    "~run"(t, r) {
-      return (t.value === null || t.value === void 0) && (this.default !== void 0 && (t.value = /* @__PURE__ */ _(this, t, r)), t.value === null || t.value === void 0) ? (t.typed = !0, t) : this.wrapped["~run"](t, r);
+    "~run"(dataset, config2) {
+      if (dataset.value === null || dataset.value === void 0) {
+        if (this.default !== void 0) {
+          dataset.value = /* @__PURE__ */ getDefault(this, dataset, config2);
+        }
+        if (dataset.value === null || dataset.value === void 0) {
+          dataset.typed = true;
+          return dataset;
+        }
+      }
+      return this.wrapped["~run"](dataset, config2);
     }
   };
 }
 // @__NO_SIDE_EFFECTS__
-function $(n, e) {
+function optional(wrapped, default_) {
   return {
     kind: "schema",
     type: "optional",
-    reference: $,
-    expects: `(${n.expects} | undefined)`,
-    async: !1,
-    wrapped: n,
-    default: e,
+    reference: optional,
+    expects: `(${wrapped.expects} | undefined)`,
+    async: false,
+    wrapped,
+    default: default_,
     get "~standard"() {
-      return /* @__PURE__ */ m(this);
+      return /* @__PURE__ */ _getStandardProps(this);
     },
-    "~run"(t, r) {
-      return t.value === void 0 && (this.default !== void 0 && (t.value = /* @__PURE__ */ _(this, t, r)), t.value === void 0) ? (t.typed = !0, t) : this.wrapped["~run"](t, r);
+    "~run"(dataset, config2) {
+      if (dataset.value === void 0) {
+        if (this.default !== void 0) {
+          dataset.value = /* @__PURE__ */ getDefault(this, dataset, config2);
+        }
+        if (dataset.value === void 0) {
+          dataset.typed = true;
+          return dataset;
+        }
+      }
+      return this.wrapped["~run"](dataset, config2);
     }
   };
 }
 // @__NO_SIDE_EFFECTS__
-function j(n, e) {
+function strictObject(entries, message) {
   return {
     kind: "schema",
     type: "strict_object",
-    reference: j,
+    reference: strictObject,
     expects: "Object",
-    async: !1,
-    entries: n,
-    message: e,
+    async: false,
+    entries,
+    message,
     get "~standard"() {
-      return /* @__PURE__ */ m(this);
+      return /* @__PURE__ */ _getStandardProps(this);
     },
-    "~run"(t, r) {
-      let i = t.value;
-      if (i && typeof i == "object") {
-        t.typed = !0, t.value = {};
-        for (let u in this.entries) {
-          let o = this.entries[u];
-          if (u in i || (o.type === "exact_optional" || o.type === "optional" || o.type === "nullish") && // @ts-expect-error
-          o.default !== void 0) {
-            let f = u in i ? (
+    "~run"(dataset, config2) {
+      const input = dataset.value;
+      if (input && typeof input === "object") {
+        dataset.typed = true;
+        dataset.value = {};
+        for (const key in this.entries) {
+          const valueSchema = this.entries[key];
+          if (key in input || (valueSchema.type === "exact_optional" || valueSchema.type === "optional" || valueSchema.type === "nullish") && // @ts-expect-error
+          valueSchema.default !== void 0) {
+            const value2 = key in input ? (
               // @ts-expect-error
-              i[u]
-            ) : /* @__PURE__ */ _(o), l = o["~run"]({ value: f }, r);
-            if (l.issues) {
-              let y = {
+              input[key]
+            ) : /* @__PURE__ */ getDefault(valueSchema);
+            const valueDataset = valueSchema["~run"]({ value: value2 }, config2);
+            if (valueDataset.issues) {
+              const pathItem = {
                 type: "object",
                 origin: "value",
-                input: i,
-                key: u,
-                value: f
+                input,
+                key,
+                value: value2
               };
-              for (let p of l.issues)
-                p.path ? p.path.unshift(y) : p.path = [y], t.issues?.push(p);
-              if (t.issues || (t.issues = l.issues), r.abortEarly) {
-                t.typed = !1;
+              for (const issue of valueDataset.issues) {
+                if (issue.path) {
+                  issue.path.unshift(pathItem);
+                } else {
+                  issue.path = [pathItem];
+                }
+                dataset.issues?.push(issue);
+              }
+              if (!dataset.issues) {
+                dataset.issues = valueDataset.issues;
+              }
+              if (config2.abortEarly) {
+                dataset.typed = false;
                 break;
               }
             }
-            l.typed || (t.typed = !1), t.value[u] = l.value;
-          } else if (o.fallback !== void 0)
-            t.value[u] = /* @__PURE__ */ ue(o);
-          else if (o.type !== "exact_optional" && o.type !== "optional" && o.type !== "nullish" && (v(this, "key", t, r, {
-            input: void 0,
-            expected: `"${u}"`,
-            path: [
-              {
-                type: "object",
-                origin: "key",
-                input: i,
-                key: u,
-                // @ts-expect-error
-                value: i[u]
-              }
-            ]
-          }), r.abortEarly))
-            break;
+            if (!valueDataset.typed) {
+              dataset.typed = false;
+            }
+            dataset.value[key] = valueDataset.value;
+          } else if (valueSchema.fallback !== void 0) {
+            dataset.value[key] = /* @__PURE__ */ getFallback(valueSchema);
+          } else if (valueSchema.type !== "exact_optional" && valueSchema.type !== "optional" && valueSchema.type !== "nullish") {
+            _addIssue(this, "key", dataset, config2, {
+              input: void 0,
+              expected: `"${key}"`,
+              path: [
+                {
+                  type: "object",
+                  origin: "key",
+                  input,
+                  key,
+                  // @ts-expect-error
+                  value: input[key]
+                }
+              ]
+            });
+            if (config2.abortEarly) {
+              break;
+            }
+          }
         }
-        if (!t.issues || !r.abortEarly) {
-          for (let u in i)
-            if (!(u in this.entries)) {
-              v(this, "key", t, r, {
-                input: u,
+        if (!dataset.issues || !config2.abortEarly) {
+          for (const key in input) {
+            if (!(key in this.entries)) {
+              _addIssue(this, "key", dataset, config2, {
+                input: key,
                 expected: "never",
                 path: [
                   {
                     type: "object",
                     origin: "key",
-                    input: i,
-                    key: u,
+                    input,
+                    key,
                     // @ts-expect-error
-                    value: i[u]
+                    value: input[key]
                   }
                 ]
               });
               break;
             }
+          }
         }
-      } else
-        v(this, "type", t, r);
-      return t;
+      } else {
+        _addIssue(this, "type", dataset, config2);
+      }
+      return dataset;
     }
   };
 }
 // @__NO_SIDE_EFFECTS__
-function S(n) {
+function string(message) {
   return {
     kind: "schema",
     type: "string",
-    reference: S,
+    reference: string,
     expects: "string",
-    async: !1,
-    message: n,
+    async: false,
+    message,
     get "~standard"() {
-      return /* @__PURE__ */ m(this);
+      return /* @__PURE__ */ _getStandardProps(this);
     },
-    "~run"(e, t) {
-      return typeof e.value == "string" ? e.typed = !0 : v(this, "type", e, t), e;
+    "~run"(dataset, config2) {
+      if (typeof dataset.value === "string") {
+        dataset.typed = true;
+      } else {
+        _addIssue(this, "type", dataset, config2);
+      }
+      return dataset;
     }
   };
 }
 // @__NO_SIDE_EFFECTS__
-function M(n, e, t) {
-  let r = n["~run"]({ value: e }, /* @__PURE__ */ R(t));
+function safeParse(schema, input, config2) {
+  const dataset = schema["~run"]({ value: input }, /* @__PURE__ */ getGlobalConfig(config2));
   return {
-    typed: r.typed,
-    success: !r.issues,
-    output: r.value,
-    issues: r.issues
+    typed: dataset.typed,
+    success: !dataset.issues,
+    output: dataset.value,
+    issues: dataset.issues
   };
 }
 
 // src/config.ts
-var oe = j({
-  storageName: S(),
+var AutoOptionsConfigSchema = strictObject({
+  storageName: string(),
   // mandatory, accepts: string
-  saveOnChange: $(D(), !0),
+  saveOnChange: optional(boolean(), true),
   // optional, accepts: boolean | undefined (default: true)
-  installAction: I(A(), null)
-  // optional, accepts: function | undefined | null (default: true)
+  installAction: nullish(function_(), null)
+  // optional, accepts: function | undefined | null (default: null)
 });
-function z(n) {
-  let e = M(oe, n);
-  if (e.success)
-    a = e.output;
-  else
-    throw e.issues.forEach((t) => {
-      let r = t.message, i = t?.path;
-      if (!i) {
-        console.error(r);
+var autoOptionsConfig;
+function parseAutoOptionsConfig(unknownConfig) {
+  const result = safeParse(AutoOptionsConfigSchema, unknownConfig);
+  if (result.success) {
+    autoOptionsConfig = Object.freeze(result.output);
+  } else {
+    result.issues.forEach((issue) => {
+      const errorMessage = issue.message;
+      const path = issue?.path;
+      if (!path) {
+        console.error(errorMessage);
         return;
       }
-      let u = i[0].key;
-      t.expected !== "never" ? console.error(`Invalid value for '${u}': ${r}.`) : console.error(`'${u}' is an invalid key.`);
-    }), new s("Invalid init parameters.");
+      const key = path[0].key;
+      if (issue.expected !== "never") {
+        console.error(`Invalid value for '${key}': ${errorMessage}.`);
+      } else {
+        console.error(`'${key}' is an invalid key.`);
+      }
+    });
+    throw new AOError("Invalid init parameters.");
+  }
 }
-var a;
+var isDebug = true;
+var manifest = chrome.runtime.getManifest();
+var isExtensionUnpacked = !("update_url" in manifest);
+
+// ../sky-helper/dist/index.mjs
+function b(e) {
+  return typeof e == "boolean";
+}
+function P(e) {
+  return e !== null && typeof e == "object";
+}
+
+// src/utils/helper.ts
+function hasText(string2) {
+  return string2.trim().length !== 0;
+}
+function hasWhiteSpace(string2) {
+  return /\s/.test(string2);
+}
+
+// src/background.ts
+var optionsPageTypes = ["fullPage", "embedded", "popup"];
+function isServiceWorker() {
+  return "serviceWorker" in self;
+}
+function isStorageAccessAllowed() {
+  return chrome.storage !== void 0;
+}
+function createTab(url, active) {
+  chrome.tabs.create({
+    url,
+    active
+  });
+}
+function getOptionsPageUrl(optionType) {
+  const optionsPageTypesUrl = {
+    fullPage: manifest.options_page,
+    // always full tab
+    embedded: manifest.options_ui?.page,
+    // might be embedded / full tab
+    popup: manifest.action?.default_popup
+    // popup on the extension bar
+  };
+  const optionPageTypeUrl = optionsPageTypesUrl[optionType];
+  if (!optionPageTypeUrl) {
+    throw new AOError("The given options page does not exist. Check your manifest.json file.");
+  }
+  return optionPageTypeUrl;
+}
+async function createDefaultConfig(optionsPageType, hasInstallAction) {
+  if (!isServiceWorker()) {
+    throw new AOError('The "createDefaultConfig" function must be initiated from the background script.');
+  }
+  if (!isStorageAccessAllowed()) {
+    throw new AOError(`Unable to access chrome storage. Try declaring the "storage" permission in the extension's manifest.`);
+  }
+  if (!optionsPageTypes.includes(optionsPageType)) {
+    throw new AOError('"OptionsPageType" must be one of the following: "fullPage", "embedded", "popup".');
+  }
+  if (!b(hasInstallAction)) {
+    throw new AOError('"hasInstallAction" must be a boolean.');
+  }
+  chrome.runtime.onInstalled.addListener(({ reason }) => {
+    if (reason === "install") {
+      const url = getOptionsPageUrl(optionsPageType);
+      const isEmbedded = optionsPageType === "embedded" && manifest.options_ui?.open_in_tab === false;
+      if (isEmbedded && hasInstallAction) {
+        chrome.runtime.openOptionsPage();
+      } else {
+        createTab(url, hasInstallAction);
+      }
+    }
+    if (isExtensionUnpacked) {
+      return;
+    }
+    if (reason === "update") {
+      const url = getOptionsPageUrl(optionsPageType);
+      createTab(url, false);
+    }
+  });
+}
 
 // src/handlers/option-handler.ts
-var E = class {
+var OptionHandler = class {
   input;
   category;
   name;
-  defaultValue;
-  constructor(e) {
-    this.input = e, this.category = this.getCategory, this.name = this.getName, this.defaultValue = this.input.getDefaultValue, this.init(), d.push(this);
+  defaultOptionValue;
+  constructor(input) {
+    this.input = input;
+    this.category = this.getCategory;
+    this.name = this.getName;
+    this.defaultOptionValue = this.getDefaultOptionValue;
+    this.init();
+    supportedOptions.push(this);
   }
   // ----- INIT -------
-  async init() {
-    await this.setUI(), this.addValueChangeEL();
-  }
   get getCategory() {
-    let e = this.input.getAOProperty("category");
-    return e !== null && c.addNewCategory(e), e;
+    const category = this.input.getAOProperty("category");
+    return category;
   }
   get getName() {
     return this.input.isRadio ? this.input.el.name : this.input.el.id;
   }
+  get getDefaultOptionValue() {
+    if (this.input.isRadio) {
+      return this.input.hasAOProperty("default") ? this.getOptionValue : null;
+    }
+    return this.input.defaultValue;
+  }
+  async init() {
+    this.addValueChangeEL();
+  }
   async setUI() {
-    c.isFirstTime ? await this.setDefaultValue() : this.input.setDisplayedValue = this.getStoredValue();
+    this.input.setDisplayedValue = this.getStoredValue();
   }
   addValueChangeEL() {
-    a.saveOnChange && this.input.el.addEventListener("change", async () => {
-      await this.storeValue();
+    if (!autoOptionsConfig.saveOnChange) return;
+    this.input.el.addEventListener("change", async () => {
+      if (isDebug) {
+        console.log("Storing", this.input.el);
+      }
+      await this.storeOptionValue();
     });
   }
   // ------ CONFIG -------
   /**
-   * Store the current value of the input.
+   * Store the current value of the input in the Chrome Storage.
   */
-  async storeValue() {
-    await c.setOptionValue({
+  async storeOptionValue() {
+    await configHandler.setOptionValue({
       category: this.category,
       name: this.name,
-      value: this.getCurrentValue
+      value: this.getOptionValue
     });
   }
   /**
-   * Get the stored value of input.
+   * Get the stored option-value of input.
    */
   getStoredValue() {
-    return c.getOptionValue({
+    return configHandler.getOptionValue({
       category: this.category,
       name: this.name
     });
   }
   /**
-   * Set the value of the input to the default one.
+   * Returns the option-value of the input.
    */
-  async setDefaultValue() {
-    if (this.input.isBoolean)
-      this.input.el.checked = this.defaultValue;
-    else if (this.input.el.value = this.defaultValue, !this.isOnDefaultValue)
-      throw new s(`"${this.defaultValue}" is an invalid default value.`, this.input.el);
-    await this.storeValue();
-  }
-  /**
-   * Returns the current value of the input.
-   */
-  get getCurrentValue() {
-    return this.input.isCheckbox ? this.input.el.checked : this.input.isRadio ? this.input.el.id : this.input.el.value;
-  }
-  /**
-   * Returns true if the current value matches the default value.
-   */
-  get isOnDefaultValue() {
-    return this.input.getCurrentValue === this.defaultValue;
+  get getOptionValue() {
+    if (this.input.isCheckbox) {
+      return this.input.el.checked;
+    } else if (this.input.isRadio) {
+      return this.input.el.id;
+    } else {
+      return this.input.el.value;
+    }
   }
   /**
    * Returns true if the current value matches the stored value in storage.
    */
-  get isOnStoredValue() {
-    return this.input.getCurrentValue === this.getStoredValue();
+  get isOnStoredOptionValue() {
+    if (this.input.isRadio && !this.input.el.checked) {
+      return true;
+    }
+    return this.getOptionValue === this.getStoredValue();
   }
-}, d = [];
+};
+async function loadUI() {
+  for (const option of supportedOptions) {
+    await option.setUI();
+  }
+}
+function getDefaultConfig() {
+  let defaultConfig = {};
+  const categories = [...new Set(supportedOptions.filter((input) => input.category !== null).map((input) => input.category))];
+  categories.map((category) => defaultConfig[category] = {});
+  supportedOptions.forEach((option) => {
+    const category = option.category;
+    const name = option.name;
+    const value = option.defaultOptionValue;
+    if (value === null) return;
+    if (category) {
+      defaultConfig[category][name] = value;
+    } else {
+      defaultConfig[name] = value;
+    }
+  });
+  return defaultConfig;
+}
+var supportedOptions = [];
 
 // node_modules/deep-object-diff/mjs/utils.js
-var g = (n) => n instanceof Date, P = (n) => Object.keys(n).length === 0, h = (n) => n != null && typeof n == "object", b = (n, ...e) => Object.prototype.hasOwnProperty.call(n, ...e), k = (n) => h(n) && P(n), x = () => /* @__PURE__ */ Object.create(null);
+var isDate = (d) => d instanceof Date;
+var isEmpty = (o) => Object.keys(o).length === 0;
+var isObject = (o) => o != null && typeof o === "object";
+var hasOwnProperty = (o, ...args) => Object.prototype.hasOwnProperty.call(o, ...args);
+var isEmptyObject = (o) => isObject(o) && isEmpty(o);
+var makeObjectWithoutPrototype = () => /* @__PURE__ */ Object.create(null);
+
+// node_modules/deep-object-diff/mjs/added.js
+var addedDiff = (lhs, rhs) => {
+  if (lhs === rhs || !isObject(lhs) || !isObject(rhs)) return {};
+  return Object.keys(rhs).reduce((acc, key) => {
+    if (hasOwnProperty(lhs, key)) {
+      const difference = addedDiff(lhs[key], rhs[key]);
+      if (isObject(difference) && isEmpty(difference)) return acc;
+      acc[key] = difference;
+      return acc;
+    }
+    acc[key] = rhs[key];
+    return acc;
+  }, makeObjectWithoutPrototype());
+};
+var added_default = addedDiff;
+
+// node_modules/deep-object-diff/mjs/deleted.js
+var deletedDiff = (lhs, rhs) => {
+  if (lhs === rhs || !isObject(lhs) || !isObject(rhs)) return {};
+  return Object.keys(lhs).reduce((acc, key) => {
+    if (hasOwnProperty(rhs, key)) {
+      const difference = deletedDiff(lhs[key], rhs[key]);
+      if (isObject(difference) && isEmpty(difference)) return acc;
+      acc[key] = difference;
+      return acc;
+    }
+    acc[key] = void 0;
+    return acc;
+  }, makeObjectWithoutPrototype());
+};
+var deleted_default = deletedDiff;
 
 // node_modules/deep-object-diff/mjs/updated.js
-var G = (n, e) => n === e ? {} : !h(n) || !h(e) ? e : g(n) || g(e) ? n.valueOf() == e.valueOf() ? {} : e : Object.keys(e).reduce((t, r) => {
-  if (b(n, r)) {
-    let i = G(n[r], e[r]);
-    return k(i) && !g(i) && (k(n[r]) || !k(e[r])) || (t[r] = i), t;
+var updatedDiff = (lhs, rhs) => {
+  if (lhs === rhs) return {};
+  if (!isObject(lhs) || !isObject(rhs)) return rhs;
+  if (isDate(lhs) || isDate(rhs)) {
+    if (lhs.valueOf() == rhs.valueOf()) return {};
+    return rhs;
   }
-  return t;
-}, x()), w = G;
+  return Object.keys(rhs).reduce((acc, key) => {
+    if (hasOwnProperty(lhs, key)) {
+      const difference = updatedDiff(lhs[key], rhs[key]);
+      if (isEmptyObject(difference) && !isDate(difference) && (isEmptyObject(lhs[key]) || !isEmptyObject(rhs[key])))
+        return acc;
+      acc[key] = difference;
+      return acc;
+    }
+    return acc;
+  }, makeObjectWithoutPrototype());
+};
+var updated_default = updatedDiff;
 
 // src/handlers/storage-handler.ts
-function U() {
-  if (!(chrome.storage !== void 0))
-    throw new s(`Unable to access chrome storage. Try declaring the "storage" permission in the extension's manifest.`);
+async function setItemInStorage(storageName, item) {
+  await chrome.storage.sync.set({ [storageName]: item });
 }
-async function F(n, e) {
-  U(), await chrome.storage.sync.set({ [n]: e });
+async function getItemFromStorage(storageName) {
+  const extensionStorageContent = await chrome.storage.sync.get();
+  const storedConfig = extensionStorageContent[storageName];
+  if (storedConfig !== void 0) {
+    return storedConfig;
+  } else {
+    return null;
+  }
 }
-async function C(n) {
-  U();
-  let t = (await chrome.storage.sync.get())[n];
-  return t !== void 0 ? t : null;
+async function getConfiguration(storageName) {
+  const storedConfiguration = await getItemFromStorage(storageName);
+  const userHasConfiguration = storedConfiguration !== null;
+  if (userHasConfiguration) {
+    return storedConfiguration;
+  } else {
+    throw new AOError(`No stored configuration was found with the name of "${storageName}".`);
+  }
 }
-async function pe(n) {
-  let e = await C(n);
-  if (e !== null)
-    return e;
-  throw new s(`No stored configuration was found with the name of "${n}".`);
-}
-function ce(n, e) {
-  return chrome.storage.onChanged.addListener((t, r) => {
-    let i = t[n];
-    if (r !== "sync" || !i) return;
-    let u = w(i.oldValue, i.newValue), f = typeof Object.values(u)[0] == "object" ? Object.keys(u)[0] : null, [l] = Object.keys(f ? u[f] : u), [y] = Object.values(f ? u[f] : u);
-    e({
-      category: f,
-      name: l,
-      value: y
+var StoredOptions = class _StoredOptions {
+  storageName;
+  configuration;
+  constructor(storageName, configuration) {
+    this.storageName = storageName;
+    this.configuration = configuration;
+  }
+  static async get(storageName) {
+    const configuration = await getConfiguration(storageName);
+    return new _StoredOptions(storageName, configuration);
+  }
+  /**
+   * Listens for changes in the storage and calls the callback function with the updated setting.
+   * 
+   * @param storageName - The name of the AutoOptions storage set in the options of your extension.
+   * @param callback - A function that is called with the updated setting's category, name, and value.
+   */
+  onValueChange(callback) {
+    return chrome.storage.onChanged.addListener((storage, storageType) => {
+      const configuration = storage[this.storageName];
+      if (storageType !== "sync") {
+        return;
+      }
+      const diff = updated_default(configuration.oldValue, configuration.newValue);
+      const hasCategory = typeof Object.values(diff)[0] === "object";
+      const category = hasCategory ? Object.keys(diff)[0] : null;
+      const [name] = category ? Object.keys(diff[category]) : Object.keys(diff);
+      const [value] = category ? Object.values(diff[category]) : Object.values(diff);
+      this.updateConfiguration({ category, name, value });
+      callback({
+        category,
+        name,
+        value
+      });
     });
-  });
-}
+  }
+  getValue(settingDetails) {
+    const { category, name } = settingDetails;
+    let option;
+    if (category) {
+      option = this.configuration[category][name];
+    } else {
+      option = this.configuration[name];
+    }
+    if (option !== void 0) {
+      return option;
+    } else {
+      throw new AOError(`The option "${name}" is not saved in the "${this.storageName}" configuration.`);
+    }
+  }
+  // this is needed because ??
+  getAllOptionsFromCategory(category) {
+    if (this.configuration[category] === void 0) {
+      throw new AOError(`The category "${category}" does not exist in the "${this.storageName}" storage.`);
+    }
+    return Object.keys(this.configuration[category]);
+  }
+  // ** INTERNAL ** //
+  updateConfiguration(settingDetails) {
+    const { category, name, value } = settingDetails;
+    if (category !== null) {
+      this.configuration[category][name] = value;
+    } else {
+      this.configuration[name] = value;
+    }
+  }
+};
 
 // src/inputs/input-types.ts
-var L = [
+var SUPPORTED_INPUT_TYPES = [
+  "checkbox",
+  "color",
+  "date",
+  "datetime-local",
+  "email",
+  "month",
+  "number",
+  "radio",
+  "range",
+  "tel",
+  "text",
+  "time",
+  "url",
+  "week"
+];
+var UNSUPPORTED_INPUT_TYPES = [
   "button",
   // not actually an input
   "file",
@@ -470,179 +757,415 @@ var L = [
   "search"
   // should not be saved
 ];
-
-// src/utils/helper.ts
-function X(n) {
-  return n.trim().length === 0;
-}
+var INPUT_TYPES = [
+  ...SUPPORTED_INPUT_TYPES,
+  ...UNSUPPORTED_INPUT_TYPES
+];
 
 // src/inputs/input-ao-properties.ts
-var V = "data-ao";
+var AOPropertyPrefix = "data-ao";
 
 // src/inputs/default-value.ts
-function ae(n) {
-  let e = Number(n.min), t = Number(n.max), r;
-  return t < e ? r = e : r = Math.round(e + (t - e) / 2), r.toString();
+function getDefaultRange(input) {
+  const min = Number(input.min);
+  const max = Number(input.max);
+  let defaultValue;
+  if (max < min) {
+    defaultValue = min;
+  } else {
+    defaultValue = Math.round(min + (max - min) / 2);
+  }
+  return defaultValue.toString();
 }
-function W(n) {
-  return {
-    checkbox: !1,
-    radio: !1,
-    color: "#000000",
-    date: "",
+function getDefaultInputValue(inputEl) {
+  const defaultInputValues = {
+    "checkbox": false,
+    "radio": false,
+    "color": "#000000",
+    "date": "",
     "datetime-local": "",
-    email: "",
-    month: "",
-    number: "",
-    range: ae(n),
-    tel: "",
-    text: "",
-    time: "",
-    url: "",
-    week: ""
-  }[n.type];
+    "email": "",
+    "month": "",
+    "number": "",
+    "range": getDefaultRange(inputEl),
+    "tel": "",
+    "text": "",
+    "time": "",
+    "url": "",
+    "week": ""
+  };
+  return defaultInputValues[inputEl.type];
 }
 
 // src/inputs/input-base.ts
-function B() {
-  Array.from(document.querySelectorAll("input")).forEach((e) => new T(e)), ye(d);
+function handleInputs() {
+  const inputElements = Array.from(document.querySelectorAll("input"));
+  inputElements.forEach((inputElement) => new InputBase(inputElement));
+  validateInputs(supportedOptions);
 }
-function ye(n) {
-  let e = () => {
-    let r = n.map((i) => i.input.el.id);
-    r.filter((i, u) => {
-      if (r.indexOf(i) !== u)
-        throw new s(`'${i}' is a duplicate ID.`);
+function validateInputs(supportedOptions2) {
+  const checkDuplicateIDs = () => {
+    const IDs = supportedOptions2.map((option) => option.input.el.id);
+    IDs.filter((item, index) => {
+      if (IDs.indexOf(item) !== index) {
+        throw new AOError(`'${item}' is a duplicate ID.`);
+      }
     });
-  }, t = () => {
-    if (n.length === 0)
-      throw new s("No supported inputs were found in the document.");
   };
-  e(), t();
+  const checkNoInputs = () => {
+    if (supportedOptions2.length === 0) {
+      throw new AOError("No supported inputs were found in the document.");
+    }
+  };
+  const checkRadioGroups = () => {
+    const radios = supportedOptions2.filter((option) => option.input.isRadio);
+    const groups = radios.reduce((groupMap, radio) => {
+      const groupName = radio.name;
+      if (!groupMap[groupName]) {
+        groupMap[groupName] = [];
+      }
+      groupMap[groupName].push(radio);
+      return groupMap;
+    }, {});
+    const hasInvalidGroup = Object.values(groups).some((optionHandlers) => {
+      const defaultCount = optionHandlers.filter(
+        (optionHandler) => optionHandler.input.hasAOProperty("default")
+      ).length;
+      return defaultCount !== 1;
+    });
+    if (hasInvalidGroup) {
+      throw new AOError('Every radio input group must have exactly one input with the property "ao-default"!');
+    }
+  };
+  checkDuplicateIDs();
+  checkNoInputs();
+  checkRadioGroups();
 }
-var T = class {
+var InputBase = class {
   el;
   isCheckbox;
   isRadio;
   isBoolean;
-  constructor(e) {
-    this.el = e, this.isCheckbox = this.isType("checkbox"), this.isRadio = this.isType("radio"), this.isBoolean = this.isCheckbox || this.isRadio, this.isSupported && new E(this);
+  defaultValue;
+  constructor(inputElement) {
+    this.el = inputElement;
+    this.isCheckbox = this.isType("checkbox");
+    this.isRadio = this.isType("radio");
+    this.isBoolean = this.isCheckbox || this.isRadio;
+    this.defaultValue = this.getDefaultValue;
+    if (this.isSupported) {
+      new OptionHandler(this);
+    }
   }
-  isType(e) {
-    return this.el.type === e;
+  isType(type) {
+    return this.el.type === type;
   }
   get isSupported() {
-    if (this.isIgnored)
-      return !1;
-    if (!this.el.id)
-      throw new s("This input must have an ID set.", this.el);
-    if (this.isRadio && !this.el.name)
-      throw new s("All radio inputs must have a name set.", this.el);
-    return !0;
+    if (this.isIgnored) {
+      return false;
+    }
+    console.log(this.el.type);
+    if (!INPUT_TYPES.includes(this.el.type)) {
+      throw new AOError("This input must have a valid input type.", this.el);
+    }
+    if (!this.el.id) {
+      throw new AOError("This input must have an ID set.", this.el);
+    }
+    if (this.isRadio && !this.el.name) {
+      throw new AOError("All radio inputs must have a name set.", this.el);
+    }
+    if (!this.isBoolean && this.hasAOProperty("default")) {
+      throw new AOError('Only boolean inputs can have a "default" ao-property.', this.el);
+    }
+    if (this.isBoolean && this.getAOProperty("value") !== null) {
+      throw new AOError('Only non-boolean inputs can have a "value" ao-property.', this.el);
+    }
+    return true;
   }
   get isIgnored() {
-    let e = L.includes(this.el.type), t = this.hasAOProperty("ignore");
-    return e || t;
+    const isTypeUnsupported = UNSUPPORTED_INPUT_TYPES.includes(this.el.type);
+    const isIgnoredByDeveloper = this.hasAOProperty("ignore");
+    const isIgnored = isTypeUnsupported || isIgnoredByDeveloper;
+    return isIgnored;
   }
-  // ********** PUBLIC ***************** //
-  hasAOProperty(e) {
-    return this.el.hasAttribute(`${V}-${e}`);
+  // ********** AO-PROPERTY ***************** //
+  hasAOProperty(AOProperty) {
+    return this.el.hasAttribute(`${AOPropertyPrefix}-${AOProperty}`);
   }
-  getAOProperty(e) {
-    let t = this.el.getAttribute(`${V}-${e}`);
-    return t !== null && !X(t) ? t : null;
+  getAOProperty(AOProperty) {
+    const AOPropertyValue = this.el.getAttribute(`${AOPropertyPrefix}-${AOProperty}`);
+    if (AOPropertyValue === null) {
+      return null;
+    }
+    if (!hasText(AOPropertyValue)) {
+      return null;
+    }
+    if (hasWhiteSpace(AOPropertyValue)) {
+      throw new AOError("An ao-property might not contain whitespace.", this.el);
+    }
+    return AOPropertyValue;
   }
-  set setDisplayedValue(e) {
-    if (this.isCheckbox)
-      this.el.checked = e;
-    else if (this.isRadio) {
-      let t = this.el.id === e;
-      this.el.checked = t;
-    } else
-      this.el.value = e;
+  // ********** CURRENT-VALUE ***************** //
+  set setDisplayedValue(optionValue) {
+    if (this.isCheckbox) {
+      this.el.checked = optionValue;
+    } else if (this.isRadio) {
+      const isActive = this.el.id === optionValue;
+      this.el.checked = isActive;
+    } else {
+      this.el.value = optionValue;
+    }
   }
   get getCurrentValue() {
-    return this.isBoolean ? this.el.checked : this.el.value;
+    if (this.isBoolean) {
+      return this.el.checked;
+    } else {
+      return this.el.value;
+    }
   }
+  //**** DEFAULT VALUE OF INPUT ******/
   get getDefaultValue() {
-    let e = W(this.el);
-    return this.isBoolean ? this.hasAOProperty("default") ?? e : this.getAOProperty("value") ?? e;
+    const defaultValue = getDefaultInputValue(this.el);
+    if (this.isBoolean) {
+      return this.hasAOProperty("default") ? true : defaultValue;
+    } else {
+      return this.getAOProperty("value") ?? defaultValue;
+    }
+  }
+  /**
+   * Returns true if the current value matches the default value.
+   */
+  get isOnDefaultValue() {
+    return this.getCurrentValue === this.defaultValue;
+  }
+  /**
+   * Set the value of the input to the default one. TODO save after
+   */
+  async setDefaultValue() {
+    if (this.isBoolean) {
+      this.el.checked = this.defaultValue;
+    } else {
+      this.el.value = this.defaultValue;
+      if (!this.isOnDefaultValue) {
+        throw new AOError(`"${this.defaultValue}" is an invalid default value.`, this.el);
+      }
+    }
   }
 };
 
+// node_modules/compare-versions/lib/esm/utils.js
+var semver = /^[v^~<>=]*?(\d+)(?:\.([x*]|\d+)(?:\.([x*]|\d+)(?:\.([x*]|\d+))?(?:-([\da-z\-]+(?:\.[\da-z\-]+)*))?(?:\+[\da-z\-]+(?:\.[\da-z\-]+)*)?)?)?$/i;
+var validateAndParse = (version) => {
+  if (typeof version !== "string") {
+    throw new TypeError("Invalid argument expected string");
+  }
+  const match = version.match(semver);
+  if (!match) {
+    throw new Error(`Invalid argument not valid semver ('${version}' received)`);
+  }
+  match.shift();
+  return match;
+};
+var isWildcard = (s) => s === "*" || s === "x" || s === "X";
+var tryParse = (v) => {
+  const n = parseInt(v, 10);
+  return isNaN(n) ? v : n;
+};
+var forceType = (a, b2) => typeof a !== typeof b2 ? [String(a), String(b2)] : [a, b2];
+var compareStrings = (a, b2) => {
+  if (isWildcard(a) || isWildcard(b2))
+    return 0;
+  const [ap, bp] = forceType(tryParse(a), tryParse(b2));
+  if (ap > bp)
+    return 1;
+  if (ap < bp)
+    return -1;
+  return 0;
+};
+var compareSegments = (a, b2) => {
+  for (let i = 0; i < Math.max(a.length, b2.length); i++) {
+    const r = compareStrings(a[i] || "0", b2[i] || "0");
+    if (r !== 0)
+      return r;
+  }
+  return 0;
+};
+
+// node_modules/compare-versions/lib/esm/compareVersions.js
+var compareVersions = (v1, v2) => {
+  const n1 = validateAndParse(v1);
+  const n2 = validateAndParse(v2);
+  const p1 = n1.pop();
+  const p2 = n2.pop();
+  const r = compareSegments(n1, n2);
+  if (r !== 0)
+    return r;
+  if (p1 && p2) {
+    return compareSegments(p1.split("."), p2.split("."));
+  } else if (p1 || p2) {
+    return p1 ? -1 : 1;
+  }
+  return 0;
+};
+
+// src/handlers/lifecycle-handler.ts
+async function onExtensionInstall() {
+  await storeExtensionVersion();
+  if (autoOptionsConfig.installAction === null) {
+    closeTab();
+  } else {
+    autoOptionsConfig.installAction();
+  }
+}
+async function isExtensionUpdated() {
+  const currentVersion = manifest.version;
+  const storedVersion = await getStoredExtensionVersion();
+  const isExtensionUpdated2 = compareVersions(currentVersion, storedVersion) === 1;
+  if (isExtensionUpdated2) {
+    if (isDebug) {
+      console.log(`Extension version updated: ${storedVersion} \u2192 ${currentVersion}`);
+    }
+  }
+  return isExtensionUpdated2;
+}
+function closeTab() {
+  chrome.tabs.getCurrent((tab) => {
+    const tabId = tab?.id;
+    chrome.tabs.remove(tabId);
+  });
+}
+function getUpdatedConfig(_source, _target) {
+  const source = structuredClone(_source);
+  const target = structuredClone(_target);
+  const result = source;
+  const addedKeys = added_default(source, target);
+  const deletedKeys = deleted_default(source, target);
+  if (isDebug) {
+    console.log("Extension has been updated, migrating settings...");
+    console.log("Removing ", deletedKeys);
+    console.log("Adding ", addedKeys);
+  }
+  for (let key in deletedKeys) {
+    const isInsideCategory = P(deletedKeys[key]);
+    if (isInsideCategory) {
+      for (let deletedKey in deletedKeys[key]) {
+        delete result[key][deletedKey];
+      }
+    } else {
+      delete result[key];
+    }
+  }
+  Object.assign(result, addedKeys);
+  return result;
+}
+async function getStoredExtensionVersion() {
+  return await getItemFromStorage("extensionVersion");
+}
+async function storeExtensionVersion() {
+  await setItemInStorage("extensionVersion", manifest.version);
+}
+
 // src/handlers/config-handler.ts
-var N = class {
+var ConfigHandler = class {
   storageName;
   configuration;
-  isFirstTime = !1;
+  isFirstTime = false;
   /* ---- Loading / Saving Configuration ---- */
   async init() {
-    this.storageName = a.storageName, this.configuration = await this.getConfig(), B(), this.handleFirstTime();
+    this.storageName = autoOptionsConfig.storageName;
+    handleInputs();
+    await this.loadConfig();
+    await this.handleExtensionLifecycle();
   }
-  async getConfig() {
-    let e = await C(this.storageName);
-    return e !== null ? e : (this.isFirstTime = !0, /* @__PURE__ */ Object.create(null));
+  async loadConfig() {
+    const storedConfig = await getItemFromStorage(this.storageName);
+    if (storedConfig !== null) {
+      await this.setConfig(storedConfig);
+    } else {
+      this.isFirstTime = true;
+      await this.resetToDefault();
+    }
   }
-  handleFirstTime() {
-    this.isFirstTime && (a.installAction === null ? chrome.tabs.getCurrent((e) => {
-      let t = e?.id;
-      chrome.tabs.remove(t);
-    }) : a.installAction());
+  async setConfig(config) {
+    this.configuration = config;
+    await this.storeConfig();
+    await loadUI();
   }
-  async saveConfig() {
-    await F(this.storageName, this.configuration);
+  async storeConfig() {
+    await setItemInStorage(this.storageName, this.configuration);
   }
-  // user does not need to give a category
-  addNewCategory(e) {
-    this.configuration[e] === void 0 && (this.configuration[e] = /* @__PURE__ */ Object.create(null));
+  async handleExtensionLifecycle() {
+    if (this.isFirstTime) {
+      await onExtensionInstall();
+      return;
+    }
+    if (await isExtensionUpdated()) {
+      await storeExtensionVersion();
+      const newConfiguration = getDefaultConfig();
+      const updatedConfiguration = getUpdatedConfig(this.configuration, newConfiguration);
+      await this.setConfig(updatedConfiguration);
+    }
   }
   /* ------------- Set / Get Option ---------------- */
-  async setOptionValue(e) {
-    let { category: t, name: r, value: i } = e;
-    t !== null ? this.configuration[t][r] = i : this.configuration[r] = i, await this.saveConfig();
+  async setOptionValue(settingDetails) {
+    const { category, name, value } = settingDetails;
+    if (category !== null) {
+      this.configuration[category][name] = value;
+    } else {
+      this.configuration[name] = value;
+    }
+    await this.storeConfig();
   }
-  getOptionValue(e) {
-    let { category: t, name: r } = e;
-    return t !== null ? this.configuration[t][r] : this.configuration[r];
+  getOptionValue(settingDetails) {
+    const { category, name } = settingDetails;
+    if (category !== null) {
+      return this.configuration[category][name];
+    } else {
+      return this.configuration[name];
+    }
   }
   /* ------- API Stuff ------ */
-  // checks are not strictly necessary, but an optimization
-  // to avoid exceeding the MAX_WRITE_OPERATIONS_PER_MINUTE (120) quota
   async resetToDefault() {
-    for (let e of d)
-      e.isOnDefaultValue || await e.setDefaultValue();
+    const defaultConfig = getDefaultConfig();
+    await this.setConfig(defaultConfig);
   }
   async saveAll() {
-    if (a.saveOnChange === !0) {
+    if (autoOptionsConfig.saveOnChange === true) {
       console.warn("Calling 'saveAll()' on AutoOptions is redundant when 'saveOnChange' is enabled.");
       return;
     }
-    for (let e of d)
-      e.isOnStoredValue || await e.storeValue();
+    for (const input of supportedOptions) {
+      if (!input.isOnStoredOptionValue) {
+        if (isDebug) {
+          console.log("Manually saving", input);
+        }
+        await input.storeOptionValue();
+      }
+    }
   }
-}, c = /* @__PURE__ */ new N();
+};
+var configHandler = /* @__PURE__ */ new ConfigHandler();
 
 // src/options.ts
-var q = class {
-  constructor(e) {
-    z(e);
+var AutoOptions = class {
+  constructor(autoOptionsConfig2) {
+    parseAutoOptionsConfig(autoOptionsConfig2);
   }
-  // load the configuration
+  // load the configuration (note: should only be ran after DOMContentLoaded)
   async loadConfig() {
-    await c.init();
+    await configHandler.init();
   }
   // Reset AutoOptions to default configuration.
   async resetToDefault() {
-    await c.resetToDefault();
+    await configHandler.resetToDefault();
   }
   // Save all configurations to chrome storage.
   async saveAll() {
-    await c.saveAll();
+    await configHandler.saveAll();
   }
 };
 export {
-  q as AutoOptions,
-  J as createDefaultConfig,
-  pe as getConfiguration,
-  ce as onSettingChange
+  AutoOptions,
+  StoredOptions,
+  createDefaultConfig
 };

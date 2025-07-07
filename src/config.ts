@@ -4,19 +4,18 @@ import * as v from 'valibot';
 const AutoOptionsConfigSchema = v.strictObject({
     storageName: v.string(), // mandatory, accepts: string
     saveOnChange: v.optional(v.boolean(), true), // optional, accepts: boolean | undefined (default: true)
-    installAction: v.nullish(v.function(), null) // optional, accepts: function | undefined | null (default: true)
+    installAction: v.nullish(v.function(), null) // optional, accepts: function | undefined | null (default: null)
 })
 
-type VAutoOptionsConfig = v.InferOutput<typeof AutoOptionsConfigSchema>
+export let autoOptionsConfig: v.InferOutput<typeof AutoOptionsConfigSchema>;
 
-// we are validating an unknown input
 export function parseAutoOptionsConfig(unknownConfig: unknown) {
     // parse the input
     const result = v.safeParse(AutoOptionsConfigSchema, unknownConfig);
 
     // save it
     if (result.success) {
-        autoOptionsConfig = result.output;
+        autoOptionsConfig = Object.freeze(result.output);
     } else {
         // log every issue
         result.issues.forEach(issue => {
@@ -44,6 +43,8 @@ export function parseAutoOptionsConfig(unknownConfig: unknown) {
     }
 }
 
-let autoOptionsConfig: VAutoOptionsConfig;
+export const isDebug = process.env.NODE_ENV === 'development';
 
-export { autoOptionsConfig }
+export const manifest = chrome.runtime.getManifest();
+
+export const isExtensionUnpacked = !('update_url' in manifest);

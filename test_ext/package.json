@@ -6,7 +6,7 @@
   "author": "",
   "type": "module",
   "scripts": {
-    "build": "node build.mjs"
+    "build:dev": "node build.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.0"

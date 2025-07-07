@@ -6,6 +6,8 @@
     <title>HTML5 Input Types</title>
 </head>
 <body>
+        <label>Text: <input type="HAHAHA" id="fake"></label><br>
+
         <label>Text: <input type="text" id="text"></label><br>
 
         <label>Password: <input type="password" id="password"></label><br>
@@ -24,22 +26,23 @@
 
         <label>Time: <input type="time" id="time"></label><br>
 
-        <label>Datetime Local: <input type="datetime-local" id="datetime-local"></label><br>
+        <label>Datetime Local: <input type="datetime-local" id="datetime-local" data-ao-category=""></label><br>
 
-        <label>Month: <input type="month" id="month"></label><br>
+        <label>Month: <input type="month" id="month" data-ao-category="something"></label><br>
 
-        <label>Week: <input type="week" id="week"></label><br>
+        <label>Week: <input type="week" id="week" data-ao-category="something"></label><br>
 
         <label>Color: <input type="color" id="color" data-ao-category="something"></label><br>
 
-        <label>Range: <input type="range" id="range" min="0" max="73"></label><br>
+        <label>Range: <input type="range" id="rangeNew" min="0" max="73"></label><br>
 
         <label>Checkbox: <input type="checkbox" id="checkbox" data-ao-default></label><br>
 
         <label>Radio Set:</label><br>
-        <label><input type="radio" id="radio1" name="radios" value="option1"> Option 1</label><br>
-        <label><input type="radio" id="radio2" name="radios" value="option2"> Option 2</label><br>
-        <label><input type="radio" id="radio3" name="radios" value="option3"> Option 3</label><br>
+        <label><input type="radio" id="radio1" name="radios" data-ao-default> Option 1</label><br>
+        <label><input type="radio" id="radio2" name="radios">Option 2</label><br>
+
+        <label><input type="radio" id="radioAlone" name="radioAlonelol" data-ao-default>Option Alone</label><br>
 
         <label>File: <input type="file" id="file"></label><br>
 

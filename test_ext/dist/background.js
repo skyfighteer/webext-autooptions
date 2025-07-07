@@ -7,40 +7,26 @@
       if (element) console.log(element);
     }
   };
+  var manifest = chrome.runtime.getManifest();
+  var isExtensionUnpacked = !("update_url" in manifest);
+  function b(e) {
+    return typeof e == "boolean";
+  }
+  var optionsPageTypes = ["fullPage", "embedded", "popup"];
   function isServiceWorker() {
     return "serviceWorker" in self;
   }
-  function createDefaultConfig(optionType, isEmbeddedWithInstallAction = false) {
-    if (!isServiceWorker()) {
-      throw new AOError('The "createDefaultConfig" function must be initiated from the background script.');
-    }
-    return chrome.runtime.onInstalled.addListener((details) => {
-      if (details.reason === "install") {
-        const url = getOptionsPageUrl(optionType);
-        if (!url) {
-          throw new AOError("The given options page does not exist. Check your manifest.json file.");
-        }
-        const isEmbedded = optionType === "embedded" && chrome.runtime.getManifest().options_ui?.open_in_tab === false;
-        if (!isEmbedded && isEmbeddedWithInstallAction) {
-          throw new AOError('You only need to set "isEmbeddedWithInstallAction" to "true" if your options page is embedded.');
-        }
-        if (isEmbedded && isEmbeddedWithInstallAction) {
-          chrome.runtime.openOptionsPage();
-        } else {
-          createTab(url);
-        }
-      }
-    });
+  function isStorageAccessAllowed() {
+    return chrome.storage !== void 0;
   }
-  function createTab(url) {
+  function createTab(url, active) {
     chrome.tabs.create({
       url,
-      active: false
+      active
     });
   }
   function getOptionsPageUrl(optionType) {
-    const manifest = chrome.runtime.getManifest();
-    const optionsPageUrl = {
+    const optionsPageTypesUrl = {
       fullPage: manifest.options_page,
       // always full tab
       embedded: manifest.options_ui?.page,
@@ -48,9 +34,83 @@
       popup: manifest.action?.default_popup
       // popup on the extension bar
     };
-    return optionsPageUrl[optionType];
+    const optionPageTypeUrl = optionsPageTypesUrl[optionType];
+    if (!optionPageTypeUrl) {
+      throw new AOError("The given options page does not exist. Check your manifest.json file.");
+    }
+    return optionPageTypeUrl;
   }
+  async function createDefaultConfig(optionsPageType, hasInstallAction) {
+    if (!isServiceWorker()) {
+      throw new AOError('The "createDefaultConfig" function must be initiated from the background script.');
+    }
+    if (!isStorageAccessAllowed()) {
+      throw new AOError(`Unable to access chrome storage. Try declaring the "storage" permission in the extension's manifest.`);
+    }
+    if (!optionsPageTypes.includes(optionsPageType)) {
+      throw new AOError('"OptionsPageType" must be one of the following: "fullPage", "embedded", "popup".');
+    }
+    if (!b(hasInstallAction)) {
+      throw new AOError('"hasInstallAction" must be a boolean.');
+    }
+    chrome.runtime.onInstalled.addListener(({ reason }) => {
+      if (reason === "install") {
+        const url = getOptionsPageUrl(optionsPageType);
+        const isEmbedded = optionsPageType === "embedded" && manifest.options_ui?.open_in_tab === false;
+        if (isEmbedded && hasInstallAction) {
+          chrome.runtime.openOptionsPage();
+        } else {
+          createTab(url, hasInstallAction);
+        }
+      }
+      if (isExtensionUnpacked) {
+        return;
+      }
+      if (reason === "update") {
+        const url = getOptionsPageUrl(optionsPageType);
+        createTab(url, false);
+      }
+    });
+  }
+  var SUPPORTED_INPUT_TYPES = [
+    "checkbox",
+    "color",
+    "date",
+    "datetime-local",
+    "email",
+    "month",
+    "number",
+    "radio",
+    "range",
+    "tel",
+    "text",
+    "time",
+    "url",
+    "week"
+  ];
+  var UNSUPPORTED_INPUT_TYPES = [
+    "button",
+    // not actually an input
+    "file",
+    // can't save into chrome storage
+    "hidden",
+    // should not be saved 
+    "submit",
+    // not actually an input
+    "image",
+    // not actually an input
+    "reset",
+    // not actually an input
+    "password",
+    // confidential
+    "search"
+    // should not be saved
+  ];
+  var INPUT_TYPES = [
+    ...SUPPORTED_INPUT_TYPES,
+    ...UNSUPPORTED_INPUT_TYPES
+  ];
 
   // src/background.ts
-  createDefaultConfig("embedded", true);
+  createDefaultConfig("embedded", false);
 })();

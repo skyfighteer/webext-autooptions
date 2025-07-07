@@ -1,22 +1,23 @@
-import { OptionHandler, supportedInputs } from "../handlers/option-handler";
-import { AOError } from "../utils/error";
-import { OptionValue } from "../handlers/config-handler";
-import { UnsupportedInputType, UNSUPPORTED_INPUT_TYPES, InputType } from "./input-types";
-import { isEmpty } from "../utils/helper";
-import { AOProperty, AOPropertyPrefix } from "./input-ao-properties";
+import { OptionHandler, supportedOptions, type SupportedOptions } from "../handlers/option-handler";
+import { Option } from "../handlers/config-handler";
+import { UnsupportedInputType, UNSUPPORTED_INPUT_TYPES, InputType, INPUT_TYPES } from "./input-types";
+import { AOFlagProperty, AOValueProperty, AOPropertyPrefix } from "./input-ao-properties";
 import { getDefaultInputValue } from "./default-value";
-import { SupportedInputs } from "../handlers/option-handler";
+import { AOError } from "../utils/error";
+import { hasWhiteSpace, hasText } from "../utils/helper";
 
-function loadInputs() {
+type InputValue = string | boolean;
+
+function handleInputs() {
     const inputElements = Array.from(document.querySelectorAll('input'));
     inputElements.forEach(inputElement => new InputBase(inputElement));
-    validateInputs(supportedInputs);
+    validateInputs(supportedOptions);
 }
 
-function validateInputs(supportedInputs: SupportedInputs) {
+function validateInputs(supportedOptions: SupportedOptions) {
     // Check for duplicate IDs among the inputs
     const checkDuplicateIDs = () => {
-        const IDs = supportedInputs.map(inputElement => inputElement.input.el.id);
+        const IDs = supportedOptions.map(option => option.input.el.id);
 
         IDs.filter((item, index) => {
             if (IDs.indexOf(item) !== index) {
@@ -27,13 +28,41 @@ function validateInputs(supportedInputs: SupportedInputs) {
 
     // Handle the case when no supported inputs are found
     const checkNoInputs = () => {
-        if (supportedInputs.length === 0) {
+        if (supportedOptions.length === 0) {
             throw new AOError('No supported inputs were found in the document.');
         }
     };
 
+    // Exactly ne must be checked by default in every radio group
+    const checkRadioGroups = () => {
+        const radios = supportedOptions.filter(option => option.input.isRadio);
+        const groups = radios.reduce<Record<string, OptionHandler[]>>((groupMap, radio) => {
+            const groupName = radio.name;
+          
+            if (!groupMap[groupName]) {
+              groupMap[groupName] = [];
+            }
+          
+            groupMap[groupName].push(radio);
+          
+            return groupMap;
+          }, {});
+
+        const hasInvalidGroup = Object.values(groups).some(optionHandlers => {
+            const defaultCount = optionHandlers.filter(
+                optionHandler => optionHandler.input.hasAOProperty('default')
+            ).length;
+            return defaultCount !== 1;
+        });
+        
+        if (hasInvalidGroup) {
+            throw new AOError('Every radio input group must have exactly one input with the property "ao-default"!');
+        }
+    }
+
     checkDuplicateIDs();
     checkNoInputs();
+    checkRadioGroups();
 }
 
 class InputBase {
@@ -41,12 +70,14 @@ class InputBase {
     readonly isCheckbox: boolean;
     readonly isRadio: boolean;
     readonly isBoolean: boolean;
+    readonly defaultValue: InputValue;
 
     constructor(inputElement: HTMLInputElement) {
         this.el = inputElement;
         this.isCheckbox = this.isType('checkbox');
         this.isRadio = this.isType('radio');
         this.isBoolean = this.isCheckbox || this.isRadio;
+        this.defaultValue = this.getDefaultValue;
 
         if (this.isSupported) {
             new OptionHandler(this);
@@ -62,6 +93,8 @@ class InputBase {
             return false;
         }
 
+        // note: invalid types are returned as text internally
+
         // no id
         if (!this.el.id) {
             throw new AOError('This input must have an ID set.', this.el);
@@ -70,6 +103,16 @@ class InputBase {
         // no name for radio
         if (this.isRadio && !this.el.name) {
             throw new AOError('All radio inputs must have a name set.', this.el);
+        }
+
+        // wrong default
+        if (!this.isBoolean && this.hasAOProperty('default')) {
+            throw new AOError('Only boolean inputs can have a "default" ao-property.', this.el);
+        }
+
+        // wrong value
+        if (this.isBoolean && this.getAOProperty('value') !== null) {
+            throw new AOError('Only non-boolean inputs can have a "value" ao-property.', this.el);
         }
 
         return true;
@@ -86,35 +129,44 @@ class InputBase {
         return isIgnored;
     }
 
-    // ********** PUBLIC ***************** //
+    // ********** AO-PROPERTY ***************** //
 
-    public hasAOProperty(AOProperty: AOProperty) {
+    public hasAOProperty(AOProperty: AOFlagProperty) {
         return this.el.hasAttribute(`${AOPropertyPrefix}-${AOProperty}`);
     }
 
-    public getAOProperty(AOProperty: AOProperty) {
+    public getAOProperty(AOProperty: AOValueProperty) {
         const AOPropertyValue = this.el.getAttribute(`${AOPropertyPrefix}-${AOProperty}`);
-
-        // no attribute found
-        if (AOPropertyValue !== null && !isEmpty(AOPropertyValue)) {
-            return AOPropertyValue;
-        }
-
-        return null;
-    }
     
-    public set setDisplayedValue(savedValue: OptionValue) {
+        if (AOPropertyValue === null) {
+            return null; // No attribute found
+        }
+    
+        if (!hasText(AOPropertyValue)) {
+            return null; // Empty or whitespace-only string
+        }
+    
+        if (hasWhiteSpace(AOPropertyValue)) {
+            throw new AOError('An ao-property might not contain whitespace.', this.el);
+        }
+    
+        return AOPropertyValue;
+    }
+
+    // ********** CURRENT-VALUE ***************** //
+    
+    public set setDisplayedValue(optionValue: Option.Value) {
         if (this.isCheckbox) {
-            this.el.checked = savedValue as boolean;
+            this.el.checked = optionValue as boolean;
         } else if (this.isRadio) {
-            const isActiveRadio = (this.el.id === savedValue);
-            this.el.checked = isActiveRadio;
+            const isActive = this.el.id === optionValue;
+            this.el.checked = isActive;
         } else {
-            this.el.value = savedValue as string;
+            this.el.value = optionValue as string;
         }
     }
 
-    public get getCurrentValue(): OptionValue {
+    public get getCurrentValue(): InputValue {
         if (this.isBoolean) {
             return this.el.checked;
         } else {
@@ -122,16 +174,42 @@ class InputBase {
         }
     }
 
-    public get getDefaultValue(): OptionValue {
+    //**** DEFAULT VALUE OF INPUT ******/
+
+    private get getDefaultValue(): InputValue {
         const defaultValue = getDefaultInputValue(this.el);
 
         if (this.isBoolean) {
-            return this.hasAOProperty('default') ?? defaultValue;
+            return this.hasAOProperty('default') ? true : defaultValue; // defaultValue = false
         } else {
             return this.getAOProperty('value') ?? defaultValue;
         }
     }
+
+    /**
+     * Returns true if the current value matches the default value.
+     */
+    public get isOnDefaultValue(): boolean {
+        return this.getCurrentValue === this.defaultValue;
+    }
+
+    /**
+     * Set the value of the input to the default one. TODO save after
+     */
+    public async setDefaultValue() {
+        if (this.isBoolean) {
+            this.el.checked = this.defaultValue as boolean;
+        } else {
+            this.el.value = this.defaultValue as string;
+
+            // after trying to set to the default value, if the html parser refused to set the value
+            if (!this.isOnDefaultValue) {
+                throw new AOError(`"${this.defaultValue}" is an invalid default value.`, this.el);
+            }
+        }
+    }
+
 }
 
-export { loadInputs }
+export { handleInputs }
 export type { InputBase }

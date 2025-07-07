@@ -1,38 +1,24 @@
-/**
- * @overview handle the storage API of chrome
- */
-
-import type { Configuration, StorageName, SettingDetails } from "./config-handler";
+import type { Configuration, StorageName, SettingDetails, Option, Setting } from "./config-handler";
 import { updatedDiff } from "deep-object-diff";
 import { AOError } from "../utils/error";
+import { isObject } from "../utils/helper";
 
-function checkStoragePermission() {
-    // check if storage can be accessed
-    const isStorageAccessAllowed = (chrome.storage !== undefined);
+// ****** INTERNAL  ******** //
 
-    if (!isStorageAccessAllowed) {
-        throw new AOError(`Unable to access chrome storage. Try declaring the "storage" permission in the extension's manifest.`)
-    }
+export async function setItemInStorage(storageName: StorageName, item: any) {
+    await chrome.storage.sync.set({ [storageName]: item });
 }
 
-export async function setStoredConfig(storageName: StorageName, config: Configuration) {
-    checkStoragePermission();
-    await chrome.storage.sync.set({ [storageName]: config });
-}
-
-export async function removeStoredConfig(storageName: StorageName) {
-    checkStoragePermission();
+export async function removeItemFromStorage(storageName: StorageName) {
     await chrome.storage.sync.remove(storageName);
 }
 
-export async function getFromStorage(storageName: StorageName) {
-    checkStoragePermission();
-
+export async function getItemFromStorage(storageName: StorageName) {
     // gets the entire storage content
     const extensionStorageContent = await chrome.storage.sync.get();
 
-    // get the stored config
-    const storedConfig: Configuration | undefined = extensionStorageContent[storageName];
+    // get the stored config (a string or an object might be stored or nothing = undefined)
+    const storedConfig: Record<string, any> | string | undefined = extensionStorageContent[storageName];
     
     // check if we have a stored config
     if (storedConfig !== undefined) {
@@ -50,42 +36,98 @@ export async function getFromStorage(storageName: StorageName) {
  * @throws Error if no stored configuration is found with the provided storage name.
  * @public
  */
-export async function getConfiguration(storageName: StorageName): Promise<Configuration> {
-    const storedConfiguration = await getFromStorage(storageName);
+async function getConfiguration(storageName: StorageName): Promise<Configuration> {
+    const storedConfiguration = await getItemFromStorage(storageName);
     const userHasConfiguration = storedConfiguration !== null;
 
     if (userHasConfiguration) {
-        return storedConfiguration;
+        return storedConfiguration as Configuration;
     } else {
         throw new AOError(`No stored configuration was found with the name of "${storageName}".`);
     }
 }
 
-/**
- * Listens for changes in the storage and calls the callback function with the updated setting.
- * 
- * @param storageName - The name of the AutoOptions storage set in the options of your extension.
- * @param callback - A function that is called with the updated setting's category, name, and value.
- * @public
- */
-export function onSettingChange(storageName: StorageName, callback: (settingDetails: SettingDetails) => void): void {
-    return chrome.storage.onChanged.addListener((storage, storageType) => {
-        const configuration = storage[storageName];
+interface GetValue {
+  category?: Option.Category;
+  name: Option.Name;
+}
 
-        // this listener could be kicked by any change. if it's not autooptions, return
-        if (storageType !== 'sync' || !configuration) return;
+// ****** PUBLIC  ******** //
 
-        const diff = updatedDiff(configuration.oldValue, configuration.newValue) as Configuration;
-        const hasCategory = typeof Object.values(diff)[0] === 'object';
-        
-        const category = hasCategory ? Object.keys(diff)[0] : null;
-        const [name] = category ? Object.keys(diff[category]) : Object.keys(diff);
-        const [value] = category ? Object.values(diff[category]) : Object.values(diff);
+export class StoredOptions {
+    storageName: StorageName;
+    configuration: Configuration;
 
-        callback({
-            category: category,
-            name: name,
-            value: value
-        });
-    })
+    private constructor(storageName: StorageName, configuration: Configuration) {
+        this.storageName = storageName;
+        this.configuration = configuration;
+    }
+
+    static async get(storageName: StorageName) {
+        const configuration = await getConfiguration(storageName);
+        return new StoredOptions(storageName, configuration);
+    }
+
+    /**
+     * Listens for changes in the storage and calls the callback function with the updated setting.
+     * 
+     * @param storageName - The name of the AutoOptions storage set in the options of your extension.
+     * @param callback - A function that is called with the updated setting's category, name, and value.
+     */
+    public onValueChange(callback: (settingDetails: SettingDetails) => void): void {
+        return chrome.storage.onChanged.addListener((storage, storageType) => {
+            const configuration = storage[this.storageName];
+
+            // important: this listener could be kicked by any change
+            if (storageType !== 'sync') {
+                return;
+            }
+
+            const diff = updatedDiff(configuration.oldValue, configuration.newValue) as Configuration;
+            const hasCategory = typeof Object.values(diff)[0] === 'object';
+            
+            const category = hasCategory ? Object.keys(diff)[0] : null;
+            const [name] = category ? Object.keys(diff[category]) : Object.keys(diff);
+            const [value] = category ? Object.values(diff[category]) : Object.values(diff);
+
+            // update cached config
+            this.updateConfiguration({category, name, value});
+
+            callback({
+                category,
+                name,
+                value
+            });
+        })
+    }
+
+	public getValue<T = Option.Value>(settingDetails: GetValue) {
+        const { category, name } = settingDetails;
+
+        let settingValue;
+
+        if (category) {
+            settingValue = (this.configuration[category] as Setting)[name];
+        } else {
+            settingValue = this.configuration[name];
+        }
+
+		if (settingValue !== undefined) {
+			return settingValue as T;
+		} else {
+			throw new AOError(`The option "${name}" is not saved in the "${this.storageName}" configuration.`);
+		}
+	}
+
+    // ** INTERNAL ** //
+
+	private updateConfiguration(settingDetails: SettingDetails) {
+        const { category, name, value } = settingDetails;
+
+        if (category !== null) {
+            (this.configuration[category] as Setting)[name] = value;
+        } else {
+            this.configuration[name] = value;
+        }
+	}
 }

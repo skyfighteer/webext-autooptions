@@ -1,11 +1,7 @@
-// should change to sky-helper func
 export const AOPropertyPrefix = 'data-ao';
 
-export const AOPropertyList = [
-    'category',
-    'default',
-    'value',
-    'ignore'
-];
+const AOValueProperties = ['category', 'value'] as const;
+const AOFlagProperties = ['default', 'ignore'] as const;
 
-export type AOProperty = typeof AOPropertyList[number];
+export type AOValueProperty = typeof AOValueProperties[number];
+export type AOFlagProperty = typeof AOFlagProperties[number];

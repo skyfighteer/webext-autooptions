@@ -1,39 +1,28 @@
-import { configHandler, OptionValue, SettingDetails } from "./config-handler.ts";
-import { AOError } from "../utils/error.ts";
+import { configHandler, Option } from "./config-handler.ts";
 import { InputBase } from "../inputs/input-base.ts";
-import { autoOptionsConfig } from "../config.ts";
+import { autoOptionsConfig, isDebug } from "../config.ts";
 
 export class OptionHandler {
     readonly input: InputBase;
-    readonly category: SettingDetails["category"];
+    readonly category: Option.Category | null;
     readonly name: HTMLInputElement['id'] | HTMLInputElement['name'];
-    private readonly defaultValue: OptionValue;
+    readonly defaultOptionValue: Option.Value | null;
 
     constructor(input: InputBase) {
         this.input = input;
         this.category = this.getCategory;
         this.name = this.getName;
-        this.defaultValue = this.input.getDefaultValue;
+        this.defaultOptionValue = this.getDefaultOptionValue;
 
         // async cannot be used inside constructors
         this.init();
-        supportedInputs.push(this);
+        supportedOptions.push(this);
     }
     
     // ----- INIT -------
 
-    private async init() {
-        await this.setUI();
-        this.addValueChangeEL();
-    }
-
     private get getCategory() {
         const category = this.input.getAOProperty('category');
-
-        if (category !== null) {
-            configHandler.addNewCategory(category);
-        }
-
         return category;
     }
 
@@ -41,16 +30,20 @@ export class OptionHandler {
         return this.input.isRadio ? this.input.el.name : this.input.el.id;
     }
 
-    private async setUI() {
-        const isFirstTime = configHandler.isFirstTime;
-
-        // if it is not the first time, simply load the saved value
-        if (!isFirstTime) {
-            this.input.setDisplayedValue = this.getStoredValue();
-        } else {           
-            // set its value in config to default - this is the process of creating the default config
-            await this.setDefaultValue();
+    private get getDefaultOptionValue() {
+        // special handling for radios here
+        if (this.input.isRadio) {
+            return this.input.hasAOProperty('default') ? this.getOptionValue : null;
         }
+        return this.input.defaultValue;
+    }
+
+    private async init() {
+        this.addValueChangeEL();
+    }
+
+    public async setUI() {
+        this.input.setDisplayedValue = this.getStoredValue();
     }
 
     private addValueChangeEL() {
@@ -58,27 +51,30 @@ export class OptionHandler {
 
         // save new value upon change
         this.input.el.addEventListener('change', async () => {
-            await this.storeValue();
+            if (isDebug) {
+                console.log('Storing', this.input.el);
+            }
+            await this.storeOptionValue();
         });
     }
 
     // ------ CONFIG -------
 
     /**
-     * Store the current value of the input.
+     * Store the current value of the input in the Chrome Storage.
     */
-    public async storeValue() {
+    public async storeOptionValue() {
         await configHandler.setOptionValue({
             category: this.category,
             name: this.name,
-            value: this.getCurrentValue
+            value: this.getOptionValue
         });
     }
 
     /**
-     * Get the stored value of input.
+     * Get the stored option-value of input.
      */
-    private getStoredValue(): OptionValue {
+    private getStoredValue(): Option.Value {
         return configHandler.getOptionValue({
             category: this.category,
             name: this.name
@@ -86,28 +82,9 @@ export class OptionHandler {
     }
 
     /**
-     * Set the value of the input to the default one.
+     * Returns the option-value of the input.
      */
-    public async setDefaultValue() {
-        if (this.input.isBoolean) {
-            this.input.el.checked = this.defaultValue as boolean;
-        } else {
-            this.input.el.value = this.defaultValue as string;
-
-            // after trying to set to the default value, if the html parser refused to set the value
-            if (!this.isOnDefaultValue) {
-                throw new AOError(`"${this.defaultValue}" is an invalid default value.`, this.input.el);
-            }
-        }
-
-        // update configuration with new value
-        await this.storeValue();
-    }
-
-    /**
-     * Returns the current value of the input.
-     */
-    private get getCurrentValue(): OptionValue {
+    public get getOptionValue(): Option.Value {
         if (this.input.isCheckbox) {
             return this.input.el.checked;
         } else if (this.input.isRadio) {
@@ -118,22 +95,56 @@ export class OptionHandler {
     }
 
     /**
-     * Returns true if the current value matches the default value.
-     */
-    public get isOnDefaultValue(): boolean {
-        return this.input.getCurrentValue === this.defaultValue;
-    }
-
-    /**
      * Returns true if the current value matches the stored value in storage.
      */
-    public get isOnStoredValue(): boolean {
-        return this.input.getCurrentValue === this.getStoredValue();
+    public get isOnStoredOptionValue(): boolean {
+        // disregard unchecked radios
+        if (this.input.isRadio && !this.input.el.checked) {
+            return true;
+        }
+
+        return this.getOptionValue === this.getStoredValue();
     }
 }
 
+export async function loadUI() {
+    for (const option of supportedOptions) {
+        await option.setUI();
+    }
+}
+
+export function getDefaultConfig() {
+    let defaultConfig: Record<string, any> = {};
+
+    // get the array of unique categories
+    const categories = [...new Set(supportedOptions
+        .filter(input => input.category !== null)
+        .map(input => input.category))] as string[];
+
+    // add categories to config
+    categories.map(category => defaultConfig[category] = {})
+
+    // add settings
+    supportedOptions.forEach(option => {
+        const category = option.category;
+        const name = option.name;
+        const value = option.defaultOptionValue;
+
+        // return if it's a non-default radio
+        if (value === null) return;
+
+        if (category) {
+            defaultConfig[category][name] = value;
+        } else {
+            defaultConfig[name] = value;
+        }
+    })
+
+    return defaultConfig;
+}
+
 // every optionhandler is a supported "input"
-export type SupportedInputs = OptionHandler[];
+export type SupportedOptions = OptionHandler[];
 
 // all supported inputs in an array
-export const supportedInputs: SupportedInputs = [];
+export const supportedOptions: SupportedOptions = [];

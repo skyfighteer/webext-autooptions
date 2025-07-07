@@ -1,15 +1,16 @@
 import { AutoOptions } from "../../dist/index.mjs";
-import "./script.ts"
+import "test.ts";
 
 (async () => {
     const ao = new AutoOptions({
-        'storageName': 'page',
+        'storageName': 'myStoredConfig',
+        "saveOnChange": false,
         installAction: function() {
             console.log('Welcome message.')
         }
     })
-    await ao.loadConfig()
+    await ao.loadConfig();
 
-    document.querySelector('#reset')?.addEventListener("click", ao.resetToDefault)
-    document.querySelector('#save')?.addEventListener("click", ao.saveAll)
+    document.querySelector('#reset')?.addEventListener("click", ao.resetToDefault);
+    document.querySelector('#save')?.addEventListener("click", ao.saveAll);
 })()

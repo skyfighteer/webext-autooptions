@@ -1,6 +1,6 @@
 // https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input
 
-const SUPPORTED_INPUT_TYPES = [
+export const SUPPORTED_INPUT_TYPES = [
     "checkbox",
     "color",
     "date",
@@ -28,8 +28,13 @@ export const UNSUPPORTED_INPUT_TYPES = [
     "search" // should not be saved
 ] as const;
 
+export const INPUT_TYPES = [
+  ...SUPPORTED_INPUT_TYPES,
+  ...UNSUPPORTED_INPUT_TYPES,
+];
+
 export type SupportedInputType = typeof SUPPORTED_INPUT_TYPES[number]
 
 export type UnsupportedInputType = typeof UNSUPPORTED_INPUT_TYPES[number];
 
-export type InputType = UnsupportedInputType | SupportedInputType;
+export type InputType = typeof INPUT_TYPES[number];

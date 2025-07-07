@@ -25,7 +25,7 @@ interface AutoOptionsConfig {
 }
 
 /**
- * Create an AutoOptions instance to save the options of an extension.
+ * Create an AutoOptions instance to store the options of an extension.
  * @public
  */
 class AutoOptions {
@@ -33,7 +33,7 @@ class AutoOptions {
         parseAutoOptionsConfig(autoOptionsConfig);
     }
 
-    // load the configuration
+    // load the configuration (note: should only be ran after DOMContentLoaded)
     public async loadConfig() {
         await configHandler.init();
     }

@@ -1,5 +1,5 @@
 import { SupportedInputType } from "./input-types"
-import { OptionValue } from "../handlers/config-handler";
+import { Option } from "../handlers/config-handler";
 
 // get the default range of an HTMLInputElement (type="range")
 function getDefaultRange(input: HTMLInputElement) {
@@ -20,7 +20,7 @@ function getDefaultRange(input: HTMLInputElement) {
 
 // get the default value of supported html input elements
 export function getDefaultInputValue(inputEl: HTMLInputElement) {   
-    const defaultInputValues: Record<SupportedInputType, OptionValue> = {
+    const defaultInputValues: Record<SupportedInputType, Option.Value> = {
         "checkbox": false,
         "radio": false,
         "color": "#000000",
