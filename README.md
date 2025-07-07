@@ -4,7 +4,7 @@ Zero-boilerplate wrapper for storing and retrieving user-settings in your Chrome
 
 ⚡ Built from scratch – fast, tree-shakeable, and bundler-friendly.\
 🔌 Syncs HTML inputs to extension settings directly. Automatically created default settings.\
-🧠 Supports categories, defaults, exclusions.
+🧠 Supports categories, defaults, exclusions.\
 🛠️ Compatible with both JavaScript and TypeScript projects.
 
 ## Installation
@@ -20,9 +20,7 @@ The library internally uses the chrome storage API, which requires permission in
 
 ```json
 {
- ...
  "permissions": ["storage"]
- ...
 }
 ```
 
@@ -51,7 +49,6 @@ The library automatically handles and validates HTML inputs.
 
 - Inputs must have an `id`. Radio inputs require a `name`.
 - Do NOT use the basic HTML attributes for inputs like `checked` or `value`. Instead, use `data-ao-` attributes for configuration:
-  
   - `data-ao-default`: Marks an input as checked by default.
   - `data-ao-value=""`: Defines a default value for an input.
   - `data-ao-category=""`: Groups inputs under a category.
@@ -97,11 +94,11 @@ import { StoredOptions } from "webext-autooptions";
 const storedOptions = await StoredOptions.get(CONFIG_NAME);
 
 storedOptions.onValueChange(settingDetails => {
-		const { category, name, value } = settingDetails;
+  const { category, name, value } = settingDetails;
 
-    if (category === "ui" && name === "background-color") {
-      changeBackgroundColor(value);
-    }
+  if (category === "ui" && name === "background-color") {
+    changeBackgroundColor(value);
+  }
 })
 
 const storedBackgroundColor = storedOptions.getValue({
@@ -109,9 +106,6 @@ const storedBackgroundColor = storedOptions.getValue({
   name: "background-color"
 })
 ```
-
-## Contributing
-Contributions are welcome! Please submit an issue or pull request on GitHub.
 
 ## License
 AutoOptions is released under the MIT License.
