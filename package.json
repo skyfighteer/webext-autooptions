@@ -14,6 +14,7 @@
   "scripts": {
     "build:dev": "cross-env NODE_ENV=development node build.mjs",
     "build:prod": "cross-env NODE_ENV=production node build.mjs & npm run build:api-extractor",
+    
     "build:api-extractor": "npm run build:types & api-extractor run & rimraf types",
     "build:types": "tsc --p src/tsconfig.json",
     "npm:test": "npm pack --dry-run",

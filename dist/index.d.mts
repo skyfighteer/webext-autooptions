@@ -80,7 +80,6 @@ export declare class StoredOptions {
      */
     onValueChange(callback: (settingDetails: SettingDetails) => void): void;
     getValue<T = Option_2.Value>(settingDetails: GetValue): T;
-    getAllOptionsFromCategory(category: string): string[];
     private updateConfiguration;
 }
 
